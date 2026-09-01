@@ -217,76 +217,9 @@ func taskFromAPI(source ticktickapi.Task) (Task, error) {
 	}, nil
 }
 
-func checklistItemsFromAPI(source *[]ticktickapi.ChecklistItem) ([]ChecklistItem, error) {
-	if source == nil {
-		return nil, nil
-	}
-
-	items := make([]ChecklistItem, 0, len(*source))
-	for _, item := range *source {
-		completedTime, err := parseTickTickTimePointer(item.CompletedTime)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"parse checklist item %q completed time: %w",
-				stringValue(item.Id),
-				err,
-			)
-		}
-		startDate, err := parseTickTickTimePointer(item.StartDate)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"parse checklist item %q start date: %w",
-				stringValue(item.Id),
-				err,
-			)
-		}
-
-		items = append(items, ChecklistItem{
-			ID:            stringValue(item.Id),
-			Title:         stringValue(item.Title),
-			Status:        intValue(item.Status),
-			CompletedTime: completedTime,
-			StartDate:     startDate,
-			IsAllDay:      boolValue(item.IsAllDay),
-			SortOrder:     int64Value(item.SortOrder),
-			TimeZone:      stringValue(item.TimeZone),
-		})
-	}
-
-	return items, nil
-}
-
 func stringValue(value *string) string {
 	if value == nil {
 		return ""
-	}
-	return *value
-}
-
-func stringSliceValue(value *[]string) []string {
-	if value == nil {
-		return nil
-	}
-	return *value
-}
-
-func boolValue(value *bool) bool {
-	if value == nil {
-		return false
-	}
-	return *value
-}
-
-func intValue(value *int) int {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
-func int64Value(value *int64) int64 {
-	if value == nil {
-		return 0
 	}
 	return *value
 }

@@ -73,7 +73,7 @@ func (p *PavlokClient) Send(ctx context.Context, task Task, s Stimulus) error {
 		if err != nil {
 			return fmt.Errorf("read response body: %w", err)
 		}
-		defer res.Body.Close()
+		defer func() { _ = res.Body.Close() }()
 		return fmt.Errorf("send stimulus: %s", string(body))
 	}
 

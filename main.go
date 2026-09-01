@@ -35,11 +35,17 @@ func main() {
 	handler := events.New(events.EventHandlerOptions{
 		HandlerTimeout: time.Minute * 2,
 	})
-	handler.Listen(orchestrator.HandleOverdueTask(ticktick, pavlok, redis))
+	_ = handler.Listen(
+		orchestrator.HandleOverdueTask(ticktick, pavlok, redis, conf.InteractionWait),
+	)
 	go handler.Run(ctx)
 	defer handler.Flush()
 
-	orch := orchestrator.New(ticktick, handler)
+	orch := orchestrator.New(orchestrator.OrchestratorOpts{
+		TickTick: ticktick,
+		Interval: conf.CheckInterval,
+		Events:   handler,
+	})
 	if err := orch.Run(ctx); err != nil {
 		slog.Error("failed to run orchestrator", "error", err)
 	}
@@ -82,6 +88,9 @@ type Config struct {
 	LogLevel string `flag:"log-level"`
 
 	RedisURL string `flag:"redis-url"`
+
+	CheckInterval   time.Duration `flag:"check-interval"`
+	InteractionWait time.Duration `flag:"interaction-wait"`
 }
 
 func parseConfig(set *pflag.FlagSet) (*Config, error) {
@@ -99,6 +108,16 @@ func setupFlags() *pflag.FlagSet {
 	set := pflag.NewFlagSet("flags", pflag.ContinueOnError)
 	set.String("log-level", "info", "The level to log at")
 	set.String("redis-url", "127.0.0.1:6379", "The redis url to connect to")
+	set.Duration(
+		"check-interval",
+		time.Minute,
+		"The amount of time to wait before retrieving overdue tasks",
+	)
+	set.Duration(
+		"interaction-wait",
+		time.Minute,
+		"The amount of time to wait in the event handler before sending a zap. Gives time for the user to mark the task complete after it is due",
+	)
 	return set
 }
 

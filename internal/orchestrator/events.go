@@ -20,6 +20,7 @@ func HandleOverdueTask(
 	ticktick *client.TickTickClient,
 	pavlok *client.PavlokClient,
 	redis rueidis.Client,
+	sleep time.Duration,
 ) events.Listener[OverdueTask] {
 
 	return func(ctx context.Context, event OverdueTask) error {
@@ -37,7 +38,7 @@ func HandleOverdueTask(
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Minute):
+		case <-time.After(sleep):
 		}
 
 		task, err := ticktick.GetTask(ctx, event.Task.ProjectID, event.Task.ID)

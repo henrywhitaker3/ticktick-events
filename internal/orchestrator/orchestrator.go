@@ -19,15 +19,23 @@ type Orchestrator struct {
 	client     Client
 	handler    *events.EventHandler
 	eventCache *cache.LruCache[string, bool]
+	interval   time.Duration
 }
 
-func New(c Client, h *events.EventHandler) *Orchestrator {
+type OrchestratorOpts struct {
+	TickTick *client.TickTickClient
+	Interval time.Duration
+	Events   *events.EventHandler
+}
+
+func New(opts OrchestratorOpts) *Orchestrator {
 	cache, _ := cache.NewLruCache[string, bool](100)
 
 	return &Orchestrator{
-		client:     c,
-		handler:    h,
+		client:     opts.TickTick,
+		handler:    opts.Events,
 		eventCache: cache,
+		interval:   opts.Interval,
 	}
 }
 
@@ -36,11 +44,14 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	defer close(ch)
 	ch <- struct{}{}
 
+	tick := time.NewTicker(o.interval)
+	defer tick.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-time.After(time.Minute):
+		case <-tick.C:
 			ch <- struct{}{}
 		case <-ch:
 			tasks, err := o.client.GetOverdueTasks(ctx)
