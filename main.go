@@ -7,14 +7,42 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/henrywhitaker3/ticktick-events/internal/client"
+	"github.com/henrywhitaker3/ticktick-events/internal/orchestrator"
 	"github.com/henrywhitaker3/windowframe/v2/config"
+	"github.com/henrywhitaker3/windowframe/v2/events"
+	"github.com/redis/rueidis"
 	"github.com/spf13/pflag"
 )
 
 func main() {
 	ctx, cancel, conf := setup()
 	defer cancel()
+
+	redis, err := rueidis.NewClient(rueidis.ClientOption{
+		InitAddress: []string{conf.RedisURL},
+	})
+	if err != nil {
+		slog.Error("could not connect to redis", "error", err)
+		os.Exit(1)
+	}
+
+	ticktick := client.New(conf.TickTickToken)
+	pavlok := client.NewPavlokClient(conf.PavlokToken)
+
+	handler := events.New(events.EventHandlerOptions{
+		HandlerTimeout: time.Minute * 2,
+	})
+	handler.Listen(orchestrator.HandleOverdueTask(ticktick, pavlok, redis))
+	go handler.Run(ctx)
+	defer handler.Flush()
+
+	orch := orchestrator.New(ticktick, handler)
+	if err := orch.Run(ctx); err != nil {
+		slog.Error("failed to run orchestrator", "error", err)
+	}
 }
 
 func setup() (context.Context, context.CancelFunc, *Config) {
@@ -23,7 +51,6 @@ func setup() (context.Context, context.CancelFunc, *Config) {
 		syscall.SIGINT,
 		syscall.SIGTERM,
 	)
-	defer cancel()
 
 	set := setupFlags()
 	if err := set.Parse(os.Args[1:]); err != nil {
@@ -49,9 +76,12 @@ func setup() (context.Context, context.CancelFunc, *Config) {
 }
 
 type Config struct {
-	Token string `env:"TICKTICK_TOKEN"`
+	TickTickToken string `env:"TICKTICK_TOKEN"`
+	PavlokToken   string `env:"PAVLOK_TOKEN"`
 
 	LogLevel string `flag:"log-level"`
+
+	RedisURL string `flag:"redis-url"`
 }
 
 func parseConfig(set *pflag.FlagSet) (*Config, error) {
@@ -68,6 +98,7 @@ func parseConfig(set *pflag.FlagSet) (*Config, error) {
 func setupFlags() *pflag.FlagSet {
 	set := pflag.NewFlagSet("flags", pflag.ContinueOnError)
 	set.String("log-level", "info", "The level to log at")
+	set.String("redis-url", "127.0.0.1:6379", "The redis url to connect to")
 	return set
 }
 

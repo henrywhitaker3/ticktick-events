@@ -1,0 +1,128 @@
+openapi: 3.0.3
+info:
+  title: TickTick Open API
+  version: 1.0.0
+paths:
+  /open/v1/project/{projectId}/task/{taskId}:
+    get:
+      operationId: GetTask
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+  /open/v1/task/undone:
+    post:
+      operationId: ListUndoneTasks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - startDate
+                - endDate
+              properties:
+                startDate:
+                  type: string
+                endDate:
+                  type: string
+      responses:
+        '200':
+          description: Undone tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+components:
+  schemas:
+    ChecklistItem:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        completedTime:
+          type: string
+        isAllDay:
+          type: boolean
+        sortOrder:
+          type: integer
+          format: int64
+        startDate:
+          type: string
+        timeZone:
+          type: string
+    Task:
+      type: object
+      required:
+        - id
+        - title
+        - status
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        desc:
+          type: string
+        isAllDay:
+          type: boolean
+        startDate:
+          type: string
+        dueDate:
+          type: string
+        snoozeDate:
+          type: string
+        completedTime:
+          type: string
+        timeZone:
+          type: string
+        reminders:
+          type: array
+          items:
+            type: string
+        repeatFlag:
+          type: string
+        priority:
+          type: integer
+        sortOrder:
+          type: integer
+          format: int64
+        kind:
+          type: string
+        etag:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChecklistItem'
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: integer

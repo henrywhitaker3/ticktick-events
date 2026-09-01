@@ -1,3 +1,21 @@
 [tools]
 go = "1.27.0"
 gotestsum = "1.13.0"
+
+[tasks.run]
+description = "Run the CLI locally"
+usage = '''
+flag "--vault <vault>" help="The 1Password vault to pick from" default="Personal"
+flag "--item <item>" help="The 1password item to pick from" default="TickTick Events API Key"
+flag "--pavlok-item <item>" help="The 1password item to pick from" default="pavlok-api-token"
+flag "--field <field>" help="The 1Password item field to reveal" default="password"
+flag "--pavlok-field <field>" help="The 1Password item field to reveal" default="password"
+flag "--log-level <level>" help="Set the log level" default="info"
+'''
+run = '''
+TICKTICK_TOKEN=$(op read "op://${usage_vault}/${usage_item}/${usage_field}")
+export TICKTICK_TOKEN
+PAVLOK_TOKEN=$(op read "op://${usage_vault}/${usage_pavlok_item}/${usage_pavlok_field}")
+export PAVLOK_TOKEN
+go run main.go --log-level ${usage_log_level} | jq
+'''
