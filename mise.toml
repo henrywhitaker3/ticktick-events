@@ -19,3 +19,7 @@ PAVLOK_TOKEN=$(op read "op://${usage_vault}/${usage_pavlok_item}/${usage_pavlok_
 export PAVLOK_TOKEN
 go run main.go --log-level ${usage_log_level} | jq
 '''
+
+[tasks.test]
+description = "Run the test suite"
+run = "gotestsum --format testname --packages './...'"

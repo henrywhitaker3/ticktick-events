@@ -16,9 +16,17 @@ type OverdueTask struct {
 	Remove func()
 }
 
+type TaskGetter interface {
+	GetTask(ctx context.Context, projectID, taskID string) (client.Task, error)
+}
+
+type StimulusSender interface {
+	Send(ctx context.Context, task client.Task, stimulus client.Stimulus) error
+}
+
 func HandleOverdueTask(
-	ticktick *client.TickTickClient,
-	pavlok *client.PavlokClient,
+	ticktick TaskGetter,
+	pavlok StimulusSender,
 	redis rueidis.Client,
 	sleep time.Duration,
 ) events.Listener[OverdueTask] {
@@ -29,7 +37,7 @@ func HandleOverdueTask(
 		if exists, err := checkIfTaskHasBeenProcessed(ctx, redis, event.Task); err != nil {
 			return fmt.Errorf("could not check if task has beeen notified: %w", err)
 		} else if exists {
-			slog.Info("not sending duplicate notification", "task", event.Task)
+			slog.Debug("not sending duplicate notification", "task", event.Task)
 			return nil
 		}
 
