@@ -12,8 +12,7 @@ import (
 )
 
 type OverdueTask struct {
-	Task   client.Task
-	Remove func()
+	Task client.Task
 }
 
 type TaskGetter interface {
@@ -63,7 +62,6 @@ func HandleOverdueTask(
 		zctx, cancel := context.WithTimeout(ctx, time.Second*3)
 		defer cancel()
 		if err := pavlok.Send(zctx, event.Task, client.Zap); err != nil {
-			event.Remove()
 			return fmt.Errorf("send zap: %w", err)
 		}
 

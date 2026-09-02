@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/client"
 	"github.com/redis/rueidis"
@@ -68,6 +69,12 @@ func TestHandleOverdueTaskMarksTaskAsProcessed(t *testing.T) {
 		ToString()
 	require.NoError(t, err)
 	require.Equal(t, "notified", value)
+
+	ttl, err := redisClient.Do(ctx, redisClient.B().Ttl().Key("ticktick:"+task.ID).Build()).
+		AsInt64()
+	require.NoError(t, err)
+	require.Greater(t, ttl, int64((9 * time.Minute).Seconds()))
+	require.LessOrEqual(t, ttl, int64((10 * time.Minute).Seconds()))
 
 	require.NoError(t, handler(ctx, OverdueTask{Task: task}))
 	require.Equal(t, 1, ticktick.calls)

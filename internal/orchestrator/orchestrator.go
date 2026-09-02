@@ -64,13 +64,16 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 						// Task already processed
 						continue
 					}
-					_ = o.handler.Dispatch[OverdueTask](OverdueTask{
+					res, _ := o.handler.DispatchChannel(OverdueTask{
 						Task: t,
-						Remove: func() {
-							o.eventCache.Delete(ctx, t.ID)
-						},
 					})
 					o.eventCache.Put(ctx, t.ID, true, time.Minute*10)
+					// Remove it from the cache if the job fails
+					// so it gets retried
+					for range res {
+						o.eventCache.Delete(ctx, t.ID)
+						break
+					}
 				}
 			}
 		}
