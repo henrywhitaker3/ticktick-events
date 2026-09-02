@@ -90,7 +90,7 @@ func checkIfTaskHasBeenProcessed(
 }
 
 func storeNotifiedTask(ctx context.Context, c rueidis.Client, task client.Task) error {
-	tomorrow := time.Now().Add(time.Hour * 24 * 30)
+	tomorrow := time.Now().Add(time.Minute * 10)
 
 	cmd := c.B().
 		Set().

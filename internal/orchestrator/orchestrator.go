@@ -18,7 +18,7 @@ type Client interface {
 type Orchestrator struct {
 	client     Client
 	handler    *events.EventHandler
-	eventCache *cache.LruCache[string, bool]
+	eventCache *cache.LruCacheExpiring[string, bool]
 	interval   time.Duration
 }
 
@@ -29,7 +29,7 @@ type OrchestratorOpts struct {
 }
 
 func New(opts OrchestratorOpts) *Orchestrator {
-	cache, _ := cache.NewLruCache[string, bool](100)
+	cache, _ := cache.NewLruCacheExpiring[string, bool](100)
 
 	return &Orchestrator{
 		client:     opts.TickTick,
@@ -70,7 +70,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 							o.eventCache.Delete(ctx, t.ID)
 						},
 					})
-					o.eventCache.Put(ctx, t.ID, true)
+					o.eventCache.Put(ctx, t.ID, true, time.Minute*10)
 				}
 			}
 		}
