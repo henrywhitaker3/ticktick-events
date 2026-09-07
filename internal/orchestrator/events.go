@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/client"
+	"github.com/henrywhitaker3/ticktick-events/internal/config"
 	"github.com/henrywhitaker3/windowframe/v2/events"
 	"github.com/redis/rueidis"
 )
@@ -28,6 +29,7 @@ func HandleOverdueTask(
 	pavlok StimulusSender,
 	redis rueidis.Client,
 	sleep time.Duration,
+	quiet config.QuietTimes,
 ) events.Listener[OverdueTask] {
 
 	return func(ctx context.Context, event OverdueTask) error {
@@ -58,11 +60,15 @@ func HandleOverdueTask(
 			return nil
 		}
 
-		slog.Info("sending zap", "task", task)
-		zctx, cancel := context.WithTimeout(ctx, time.Second*3)
-		defer cancel()
-		if err := pavlok.Send(zctx, event.Task, client.Zap); err != nil {
-			return fmt.Errorf("send zap: %w", err)
+		if !quiet.In(time.Now()) {
+			slog.Info("sending zap", "task", task)
+			zctx, cancel := context.WithTimeout(ctx, time.Second*3)
+			defer cancel()
+			if err := pavlok.Send(zctx, event.Task, client.Zap); err != nil {
+				return fmt.Errorf("send zap: %w", err)
+			}
+		} else {
+			slog.Debug("skipping zap due to quiet times")
 		}
 
 		return storeNotifiedTask(ctx, redis, event.Task)

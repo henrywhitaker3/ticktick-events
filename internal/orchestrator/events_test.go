@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/client"
+	"github.com/henrywhitaker3/ticktick-events/internal/config"
 	"github.com/redis/rueidis"
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
@@ -55,7 +56,7 @@ func TestHandleOverdueTaskMarksTaskAsProcessed(t *testing.T) {
 	}
 	ticktick := &mockTaskGetter{task: task}
 	pavlok := &mockStimulusSender{}
-	handler := HandleOverdueTask(ticktick, pavlok, redisClient, 0)
+	handler := HandleOverdueTask(ticktick, pavlok, redisClient, 0, config.QuietTimes{})
 
 	require.NoError(t, handler(ctx, OverdueTask{Task: task}))
 	require.Equal(t, 1, ticktick.calls)
@@ -79,6 +80,67 @@ func TestHandleOverdueTaskMarksTaskAsProcessed(t *testing.T) {
 	require.NoError(t, handler(ctx, OverdueTask{Task: task}))
 	require.Equal(t, 1, ticktick.calls)
 	require.Equal(t, 1, pavlok.calls)
+}
+
+func TestHandleOverdueTaskDoesNotZapDuringQuietTime(t *testing.T) {
+	ctx := t.Context()
+	redisClient := newTestRedisClient(t)
+
+	task := client.Task{
+		ID:        "task-quiet-time",
+		ProjectID: "project-1",
+		Title:     "Pay bill",
+		Status:    client.TaskStatusNormal,
+	}
+	ticktick := &mockTaskGetter{task: task}
+	pavlok := &mockStimulusSender{}
+	handler := HandleOverdueTask(ticktick, pavlok, redisClient, 0, quietTimesAround(time.Now()))
+
+	require.NoError(t, handler(ctx, OverdueTask{Task: task}))
+	require.Equal(t, 1, ticktick.calls)
+	require.Zero(t, pavlok.calls)
+
+	value, err := redisClient.Do(ctx, redisClient.B().Get().Key("ticktick:"+task.ID).Build()).
+		ToString()
+	require.NoError(t, err)
+	require.Equal(t, "notified", value)
+}
+
+func quietTimesAround(c time.Time) config.QuietTimes {
+	start := c.Add(-time.Minute)
+	end := c.Add(time.Minute)
+	quietTime := config.TimeRange{
+		Start: time.Date(
+			0,
+			time.January,
+			1,
+			start.Hour(),
+			start.Minute(),
+			start.Second(),
+			start.Nanosecond(),
+			time.UTC,
+		),
+		End: time.Date(
+			0,
+			time.January,
+			1,
+			end.Hour(),
+			end.Minute(),
+			end.Second(),
+			end.Nanosecond(),
+			time.UTC,
+		),
+	}
+
+	return config.QuietTimes{
+		Monday:    quietTime,
+		Tuesday:   quietTime,
+		Wednesday: quietTime,
+		Thursday:  quietTime,
+		Friday:    quietTime,
+		Saturday:  quietTime,
+		Sunday:    quietTime,
+	}
 }
 
 func newTestRedisClient(t *testing.T) rueidis.Client {
