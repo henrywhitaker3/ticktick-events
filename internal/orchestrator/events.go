@@ -55,7 +55,7 @@ func HandleOverdueTask(
 			return fmt.Errorf("could not refresh task: %w", err)
 		}
 
-		if task.Status > 0 {
+		if task.Status > 0 || task.CompletedTime != nil || task.DueDate != event.Task.DueDate {
 			slog.Debug("task completed", "task", task)
 			return nil
 		}
