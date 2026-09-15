@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/henrywhitaker3/windowframe/v2 v2.5.0
 	github.com/oapi-codegen/runtime v1.7.0
-	github.com/redis/rueidis v1.0.77
+	github.com/redis/rueidis v1.0.78
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go/modules/redis v0.44.0
