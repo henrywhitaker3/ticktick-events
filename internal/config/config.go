@@ -132,8 +132,10 @@ func (q QuietTimes) In(c time.Time) bool {
 }
 
 type Config struct {
-	TickTickToken string `env:"TICKTICK_TOKEN"`
-	PavlokToken   string `env:"PAVLOK_TOKEN"`
+	TickTickToken config.RedactedString `env:"TICKTICK_TOKEN"`
+	PavlokToken   config.RedactedString `env:"PAVLOK_TOKEN"`
+
+	FrancisPSK config.RedactedString `env:"FRANCIS_PSK"`
 
 	LogLevel string `flag:"log-level"`
 

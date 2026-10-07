@@ -24,8 +24,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	ticktick := client.New(conf.TickTickToken)
-	pavlok := client.NewPavlokClient(conf.PavlokToken)
+	ticktick := client.New(string(conf.TickTickToken))
+	pavlok := client.NewPavlokClient(string(conf.PavlokToken))
 
 	handler := events.New(events.EventHandlerOptions{
 		HandlerTimeout: time.Minute * 2,
