@@ -146,8 +146,9 @@ type Config struct {
 
 	LogLevel string `flag:"log-level"`
 
-	CheckInterval   time.Duration `flag:"check-interval"`
-	InteractionWait time.Duration `flag:"interaction-wait"`
+	MaxNotifications int           `flag:"max-notifications"`
+	CheckInterval    time.Duration `flag:"check-interval"`
+	InteractionWait  time.Duration `flag:"interaction-wait"`
 
 	QuietTimes QuietTimes `env:",prefix=QUIET_TIMES_"`
 }
@@ -177,6 +178,7 @@ func setupFlags() *pflag.FlagSet {
 		time.Minute,
 		"The amount of time to wait in the event handler before sending a zap. Gives time for the user to mark the task complete after it is due",
 	)
+	set.Int("max-notifications", 5, "The max number of notifications")
 	return set
 }
 

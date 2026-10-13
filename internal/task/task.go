@@ -27,11 +27,12 @@ type StimulusSender interface {
 }
 
 type Task struct {
-	client   actor.Client[taskState]
-	ticktick TaskGetter
-	pavlok   StimulusSender
-	sleep    time.Duration
-	quiet    config.QuietTimes
+	client           actor.Client[taskState]
+	ticktick         TaskGetter
+	pavlok           StimulusSender
+	sleep            time.Duration
+	quiet            config.QuietTimes
+	maxNotifications int
 }
 
 type taskState struct {
@@ -42,20 +43,22 @@ type taskState struct {
 }
 
 type Opts struct {
-	Ticktick TaskGetter
-	Pavlok   StimulusSender
-	Sleep    time.Duration
-	Quiet    config.QuietTimes
+	Ticktick         TaskGetter
+	Pavlok           StimulusSender
+	Sleep            time.Duration
+	Quiet            config.QuietTimes
+	MaxNotifications int
 }
 
 func New(opts Opts) actor.Factory {
 	return func(actorID string, service *actor.Service) actor.Actor {
 		return &Task{
-			client:   actor.NewActorClient[taskState](Type, actorID, service),
-			ticktick: opts.Ticktick,
-			pavlok:   opts.Pavlok,
-			sleep:    opts.Sleep,
-			quiet:    opts.Quiet,
+			client:           actor.NewActorClient[taskState](Type, actorID, service),
+			ticktick:         opts.Ticktick,
+			pavlok:           opts.Pavlok,
+			sleep:            opts.Sleep,
+			quiet:            opts.Quiet,
+			maxNotifications: opts.MaxNotifications,
 		}
 	}
 }
@@ -111,7 +114,7 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 		return fmt.Errorf("get task state: %w", err)
 	}
 	defer func() {
-		if state.Completed {
+		if state.Completed || state.NotificationCounter >= t.maxNotifications {
 			_ = t.client.DeleteState(ctx)
 			t.client.Halt()
 			return
