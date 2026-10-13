@@ -32,12 +32,21 @@ func Setup(version string) (context.Context, context.CancelFunc, *Config) {
 	log.Setup(log.SlogLevel(conf.LogLevel))
 	slog.Debug("loaded config", "config", conf)
 
-	tracing.InitTracer(tracing.TracingOpts{
+	tracer, err := tracing.InitTracer(tracing.TracingOpts{
 		ServiceName: "ticktick-events",
 		SampleRate:  1,
 	}, version)
+	if err != nil {
+		slog.Error("init tracer", "error", err)
+		os.Exit(1)
+	}
 
-	return ctx, cancel, conf
+	return ctx, func() {
+		cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		_ = tracer.Shutdown(ctx)
+	}, conf
 }
 
 type TimeRange struct {
