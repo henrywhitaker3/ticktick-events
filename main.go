@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/client"
 	"github.com/henrywhitaker3/ticktick-events/internal/config"
@@ -38,27 +36,17 @@ func main() {
 		slog.Error("register task actor", "error", err)
 		os.Exit(1)
 	}
-	go func() {
-		if err := host.Run(ctx); err != nil {
-			slog.Error("start actor runtime", "error", err)
-			os.Exit(1)
-		}
-	}()
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second*10)
-	defer cancel()
-	select {
-	case <-waitCtx.Done():
-		slog.Error("wait for runtime to be ready", "error", waitCtx.Err())
+	if err := orchestrator.Regster(host, orchestrator.OrchestratorOpts{
+		Service:  host.Service(),
+		Interval: conf.CheckInterval,
+		TickTick: ticktick,
+	}); err != nil {
+		slog.Error("register orchestrator", "error", err)
 		os.Exit(1)
-	case <-host.Ready():
 	}
 
-	orch := orchestrator.New(orchestrator.OrchestratorOpts{
-		TickTick: ticktick,
-		Interval: conf.CheckInterval,
-		Service:  host.Service(),
-	})
-	if err := orch.Run(ctx); err != nil {
-		slog.Error("failed to run orchestrator", "error", err)
+	if err := host.Run(ctx); err != nil {
+		slog.Error("start actor runtime", "error", err)
+		os.Exit(1)
 	}
 }
