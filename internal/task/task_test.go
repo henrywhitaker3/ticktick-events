@@ -44,12 +44,11 @@ func (m *mockStimulusSender) Send(
 
 type mockActorClient struct {
 	actor.Client[taskState]
-	state          taskState
-	deleted        bool
-	halted         bool
-	dispatchCalls  int
-	dispatchMethod string
-	dispatchInput  any
+	state           taskState
+	setAlarmCalls   int
+	alarmName       string
+	alarmProperties actor.AlarmProperties
+	deletedAlarm    string
 }
 
 func (m *mockActorClient) GetState(context.Context) (taskState, error) {
@@ -61,25 +60,20 @@ func (m *mockActorClient) SetState(_ context.Context, state taskState, _ *actor.
 	return nil
 }
 
-func (m *mockActorClient) DeleteState(context.Context) error {
-	m.deleted = true
+func (m *mockActorClient) SetAlarm(
+	_ context.Context,
+	name string,
+	properties actor.AlarmProperties,
+) error {
+	m.setAlarmCalls++
+	m.alarmName = name
+	m.alarmProperties = properties
 	return nil
 }
 
-func (m *mockActorClient) Halt() {
-	m.halted = true
-}
-
-func (m *mockActorClient) Dispatch(
-	_ context.Context,
-	method string,
-	input any,
-	_ ...actor.JobOption,
-) (string, bool, error) {
-	m.dispatchCalls++
-	m.dispatchMethod = method
-	m.dispatchInput = input
-	return "job-1", true, nil
+func (m *mockActorClient) DeleteAlarm(_ context.Context, name string) error {
+	m.deletedAlarm = name
+	return nil
 }
 
 type taskEnvelope struct {
@@ -91,7 +85,7 @@ func (e taskEnvelope) Decode(into any) error {
 	return nil
 }
 
-func TestOverdueDispatchesNotificationJob(t *testing.T) {
+func TestOverdueOnboardsTaskWithRecurringAlarm(t *testing.T) {
 	ctx := t.Context()
 
 	originalTask := client.Task{
@@ -104,22 +98,54 @@ func TestOverdueDispatchesNotificationJob(t *testing.T) {
 	pavlok := &mockStimulusSender{}
 	state := &mockActorClient{}
 	task := &Task{
-		client:   state,
-		ticktick: ticktick,
-		pavlok:   pavlok,
-		quiet:    config.QuietTimes{},
+		client:           state,
+		ticktick:         ticktick,
+		pavlok:           pavlok,
+		sleep:            time.Minute,
+		quiet:            config.QuietTimes{},
+		maxNotifications: 5,
 	}
 
+	before := time.Now()
 	_, err := task.Invoke(ctx, Overdue, taskEnvelope{task: originalTask})
 	require.NoError(t, err)
 	require.Zero(t, ticktick.calls)
 	require.Zero(t, pavlok.calls)
 	require.Equal(t, &originalTask, state.state.Task)
-	require.Equal(t, 1, state.dispatchCalls)
-	require.Equal(t, Overdue, state.dispatchMethod)
-	require.Nil(t, state.dispatchInput)
+	require.True(t, state.state.Onboarded)
+	require.Equal(t, 1, state.setAlarmCalls)
+	require.Equal(t, Overdue, state.alarmName)
+	require.Equal(t, "PT10M", state.alarmProperties.Interval)
+	require.WithinDuration(t, before.Add(time.Minute), state.alarmProperties.DueTime, time.Second)
 
-	require.NoError(t, task.Job(ctx, Overdue, nil))
+	_, err = task.Invoke(ctx, Overdue, taskEnvelope{task: originalTask})
+	require.NoError(t, err)
+	require.Equal(t, 1, state.setAlarmCalls)
+}
+
+func TestOverdueAlarmSendsZap(t *testing.T) {
+	ctx := t.Context()
+
+	originalTask := client.Task{
+		ID:        "task-1",
+		ProjectID: "project-1",
+		Title:     "Pay bill",
+		Status:    client.TaskStatusNormal,
+	}
+	ticktick := &mockTaskGetter{task: originalTask}
+	pavlok := &mockStimulusSender{}
+	state := &mockActorClient{}
+	task := &Task{
+		client:           state,
+		ticktick:         ticktick,
+		pavlok:           pavlok,
+		quiet:            config.QuietTimes{},
+		maxNotifications: 5,
+	}
+
+	_, err := task.Invoke(ctx, Overdue, taskEnvelope{task: originalTask})
+	require.NoError(t, err)
+	require.NoError(t, task.Alarm(ctx, Overdue, nil))
 	require.Equal(t, 1, ticktick.calls)
 	require.Equal(t, originalTask.ProjectID, ticktick.projectID)
 	require.Equal(t, originalTask.ID, ticktick.taskID)
@@ -129,16 +155,9 @@ func TestOverdueDispatchesNotificationJob(t *testing.T) {
 	require.Equal(t, &originalTask, state.state.Task)
 	require.NotNil(t, state.state.LastNotifiedAt)
 	require.Equal(t, 1, state.state.NotificationCounter)
-
-	_, err = task.Invoke(ctx, Overdue, taskEnvelope{task: originalTask})
-	require.NoError(t, err)
-	require.NoError(t, task.Job(ctx, Overdue, nil))
-	require.Equal(t, 2, state.dispatchCalls)
-	require.Equal(t, 1, ticktick.calls)
-	require.Equal(t, 1, pavlok.calls)
 }
 
-func TestOverdueDoesNotZapDuringQuietTime(t *testing.T) {
+func TestOverdueAlarmDoesNotZapDuringQuietTime(t *testing.T) {
 	ctx := t.Context()
 
 	originalTask := client.Task{
@@ -151,52 +170,48 @@ func TestOverdueDoesNotZapDuringQuietTime(t *testing.T) {
 	pavlok := &mockStimulusSender{}
 	state := &mockActorClient{}
 	task := &Task{
-		client:   state,
-		ticktick: ticktick,
-		pavlok:   pavlok,
-		quiet:    quietTimesAround(time.Now()),
+		client:           state,
+		ticktick:         ticktick,
+		pavlok:           pavlok,
+		quiet:            quietTimesAround(time.Now()),
+		maxNotifications: 5,
 	}
 
 	_, err := task.Invoke(ctx, Overdue, taskEnvelope{task: originalTask})
 	require.NoError(t, err)
-	require.NoError(t, task.Job(ctx, Overdue, nil))
-	require.Equal(t, 1, state.dispatchCalls)
+	require.NoError(t, task.Alarm(ctx, Overdue, nil))
 	require.Equal(t, 1, ticktick.calls)
 	require.Zero(t, pavlok.calls)
-	require.Equal(t, &originalTask, state.state.Task)
 	require.Nil(t, state.state.LastNotifiedAt)
 	require.Zero(t, state.state.NotificationCounter)
 }
 
-func TestOverdueJobDoesNotNotifyWithinTenMinutesOfLastNotification(t *testing.T) {
+func TestOverdueAlarmCancelsWhenTaskIsCompleted(t *testing.T) {
 	ctx := t.Context()
 
 	originalTask := client.Task{
-		ID:        "task-recently-notified",
+		ID:        "task-complete",
 		ProjectID: "project-1",
 		Title:     "Pay bill",
 		Status:    client.TaskStatusNormal,
 	}
-	lastNotifiedAt := time.Now().Add(-9 * time.Minute)
-	ticktick := &mockTaskGetter{task: originalTask}
-	pavlok := &mockStimulusSender{}
+	completedTask := originalTask
+	completedTask.Status = 1
+	ticktick := &mockTaskGetter{task: completedTask}
 	state := &mockActorClient{state: taskState{
-		Task:                &originalTask,
-		LastNotifiedAt:      &lastNotifiedAt,
-		NotificationCounter: 1,
+		Task:      &originalTask,
+		Onboarded: true,
 	}}
 	task := &Task{
-		client:   state,
-		ticktick: ticktick,
-		pavlok:   pavlok,
-		quiet:    config.QuietTimes{},
+		client:           state,
+		ticktick:         ticktick,
+		pavlok:           &mockStimulusSender{},
+		maxNotifications: 5,
 	}
 
-	require.NoError(t, task.Job(ctx, Overdue, nil))
-	require.Zero(t, ticktick.calls)
-	require.Zero(t, pavlok.calls)
-	require.Equal(t, 1, state.state.NotificationCounter)
-	require.Equal(t, &lastNotifiedAt, state.state.LastNotifiedAt)
+	require.NoError(t, task.Alarm(ctx, Overdue, nil))
+	require.True(t, state.state.Completed)
+	require.Equal(t, Overdue, state.deletedAlarm)
 }
 
 func quietTimesAround(c time.Time) config.QuietTimes {
