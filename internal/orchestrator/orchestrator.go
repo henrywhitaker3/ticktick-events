@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/client"
-	"github.com/henrywhitaker3/windowframe/v2/cache"
-	"github.com/henrywhitaker3/windowframe/v2/events"
+	"github.com/henrywhitaker3/ticktick-events/internal/task"
+	"github.com/italypaleale/francis/actor"
 )
 
 type Client interface {
@@ -16,26 +16,22 @@ type Client interface {
 }
 
 type Orchestrator struct {
-	client     Client
-	handler    *events.EventHandler
-	eventCache *cache.LruCacheExpiring[string, bool]
-	interval   time.Duration
+	client   Client
+	interval time.Duration
+	service  *actor.Service
 }
 
 type OrchestratorOpts struct {
 	TickTick *client.TickTickClient
+	Service  *actor.Service
 	Interval time.Duration
-	Events   *events.EventHandler
 }
 
 func New(opts OrchestratorOpts) *Orchestrator {
-	cache, _ := cache.NewLruCacheExpiring[string, bool](100)
-
 	return &Orchestrator{
-		client:     opts.TickTick,
-		handler:    opts.Events,
-		eventCache: cache,
-		interval:   opts.Interval,
+		client:   opts.TickTick,
+		interval: opts.Interval,
+		service:  opts.Service,
 	}
 }
 
@@ -60,19 +56,14 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 			} else {
 				slog.Debug("overdue tasks", "tasks", tasks)
 				for _, t := range tasks {
-					if _, ok := o.eventCache.Get(ctx, t.ID); ok {
-						// Task already processed
-						continue
-					}
-					res, _ := o.handler.DispatchChannel(OverdueTask{
-						Task: t,
-					})
-					o.eventCache.Put(ctx, t.ID, true, time.Minute*10)
-					// Remove it from the cache if the job fails
-					// so it gets retried
-					for range res {
-						o.eventCache.Delete(ctx, t.ID)
-						break
+					if _, err := o.service.Invoke(
+						ctx,
+						task.Type,
+						t.ID,
+						task.Overdue,
+						t,
+					); err != nil {
+						slog.ErrorContext(ctx, "invoke overdue", "task", t, "error", err)
 					}
 				}
 			}
