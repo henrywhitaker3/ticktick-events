@@ -131,15 +131,20 @@ func (q QuietTimes) In(c time.Time) bool {
 	}
 }
 
+type Runtime struct {
+	PostgresURL config.RedactedString `env:"DB_URL"`
+	PSK         config.RedactedString `env:"PSK"`
+	Host        string                `env:"HOST"`
+	Port        int                   `env:"PORT, default=7571"`
+}
+
 type Config struct {
 	TickTickToken config.RedactedString `env:"TICKTICK_TOKEN"`
 	PavlokToken   config.RedactedString `env:"PAVLOK_TOKEN"`
 
-	FrancisPSK config.RedactedString `env:"FRANCIS_PSK"`
+	Runtime Runtime `env:",prefix=RUNTIME_"`
 
 	LogLevel string `flag:"log-level"`
-
-	RedisURL string `flag:"redis-url"`
 
 	CheckInterval   time.Duration `flag:"check-interval"`
 	InteractionWait time.Duration `flag:"interaction-wait"`
