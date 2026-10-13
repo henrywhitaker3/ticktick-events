@@ -25,10 +25,11 @@ func main() {
 	ticktick := client.New(string(conf.TickTickToken))
 	pavlok := client.NewPavlokClient(string(conf.PavlokToken))
 	if err := task.Register(host, task.Opts{
-		Ticktick: ticktick,
-		Pavlok:   pavlok,
-		Sleep:    conf.InteractionWait,
-		Quiet:    conf.QuietTimes,
+		Ticktick:         ticktick,
+		Pavlok:           pavlok,
+		Sleep:            conf.InteractionWait,
+		Quiet:            conf.QuietTimes,
+		MaxNotifications: conf.MaxNotifications,
 	}); err != nil {
 		slog.Error("register task actor", "error", err)
 		os.Exit(1)

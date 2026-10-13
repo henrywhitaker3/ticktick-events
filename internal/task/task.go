@@ -40,6 +40,7 @@ type taskState struct {
 	LastNotifiedAt      *time.Time
 	NotificationCounter int
 	Completed           bool
+	Onboarded           bool
 }
 
 type Opts struct {
@@ -85,21 +86,29 @@ func (t *Task) overdue(ctx context.Context, data actor.Envelope) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get task state: %w", err)
 	}
+	if state.Onboarded {
+		return state, nil
+	}
+
 	var task client.Task
 	if err := data.Decode(&task); err != nil {
 		return nil, fmt.Errorf("decode task data: %w", err)
 	}
+	if err := t.client.SetAlarm(ctx, Overdue, actor.AlarmProperties{
+		DueTime:  time.Now().Add(t.sleep),
+		Interval: "PT10M",
+	}); err != nil {
+		return nil, fmt.Errorf("setup alert alarm: %w", err)
+	}
 	state.Task = &task
+	state.Onboarded = true
 	if err := t.client.SetState(ctx, state, nil); err != nil {
 		return nil, fmt.Errorf("set task state: %w", err)
-	}
-	if _, _, err := t.client.Dispatch(ctx, Overdue, nil); err != nil {
-		return nil, fmt.Errorf("dispatch overdue job: %w", err)
 	}
 	return state, nil
 }
 
-func (t *Task) Job(ctx context.Context, method string, data actor.Envelope) error {
+func (t *Task) Alarm(ctx context.Context, method string, data actor.Envelope) error {
 	switch method {
 	case Overdue:
 		return t.processOverdueJob(ctx)
@@ -113,31 +122,15 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get task state: %w", err)
 	}
-	defer func() {
-		if state.Completed || state.NotificationCounter >= t.maxNotifications {
-			_ = t.client.DeleteState(ctx)
-			t.client.Halt()
-			return
-		}
-	}()
 
 	if state.Task == nil {
 		return fmt.Errorf("cannot process nil task")
 	}
-	ctx = log.WithLogAttr(ctx, "task", state.Task)
-
+	ctx = log.WithLogAttr(ctx, "state", state)
 	slog.InfoContext(ctx, "handling overdue task job")
 
-	if state.LastNotifiedAt != nil && state.LastNotifiedAt.After(time.Now().Add(-time.Minute*10)) {
-		slog.DebugContext(ctx, "task last notified less than 10 mins ago")
+	if state.Completed {
 		return nil
-	}
-
-	// Wait for task interaction
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(t.sleep):
 	}
 
 	task, err := t.ticktick.GetTask(ctx, state.Task.ProjectID, state.Task.ID)
@@ -145,9 +138,16 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 		return fmt.Errorf("refresh task data: %w", err)
 	}
 
-	if task.Status > 0 || task.CompletedTime != nil || task.DueDate != state.Task.DueDate {
+	if task.Status > 0 || task.CompletedTime != nil || task.DueDate != state.Task.DueDate ||
+		state.NotificationCounter >= t.maxNotifications {
 		slog.DebugContext(ctx, "task completed")
 		state.Completed = true
+		if err := t.client.SetState(ctx, state, nil); err != nil {
+			return fmt.Errorf("store task state: %w", err)
+		}
+		if err := t.client.DeleteAlarm(ctx, Overdue); err != nil {
+			return fmt.Errorf("delete overdue alarm: %w", err)
+		}
 		return nil
 	}
 
@@ -156,6 +156,7 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 		return nil
 	}
 
+	slog.InfoContext(ctx, "sending zap")
 	if err := t.pavlok.Send(ctx, task, client.Zap); err != nil {
 		return fmt.Errorf("send zap: %w", err)
 	}

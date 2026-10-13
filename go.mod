@@ -3,7 +3,7 @@ module github.com/henrywhitaker3/ticktick-events
 go 1.27.2
 
 require (
-	github.com/henrywhitaker3/windowframe/v2 v2.6.1
+	github.com/henrywhitaker3/windowframe/v2 v2.6.2
 	github.com/italypaleale/francis v0.1.1
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/redis/rueidis v1.0.78
