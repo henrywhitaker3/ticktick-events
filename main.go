@@ -13,8 +13,12 @@ import (
 	"github.com/henrywhitaker3/ticktick-events/internal/task"
 )
 
+var (
+	version = "dev"
+)
+
 func main() {
-	ctx, cancel, conf := config.Setup()
+	ctx, cancel, conf := config.Setup(version)
 	defer cancel()
 
 	host, err := runtime.NewHost(conf.Runtime)

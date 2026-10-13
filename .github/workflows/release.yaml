@@ -25,3 +25,5 @@ jobs:
           tags: |
             ghcr.io/henrywhitaker3/ticktick-events:latest
             ghcr.io/henrywhitaker3/ticktick-events:${{ github.ref_name }}
+          build-args: |
+            VERSION=${{ github.ref_name }}

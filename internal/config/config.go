@@ -13,9 +13,10 @@ import (
 
 	"github.com/henrywhitaker3/windowframe/v2/config"
 	"github.com/henrywhitaker3/windowframe/v2/log"
+	"github.com/henrywhitaker3/windowframe/v2/tracing"
 )
 
-func Setup() (context.Context, context.CancelFunc, *Config) {
+func Setup(version string) (context.Context, context.CancelFunc, *Config) {
 	ctx, cancel := signal.NotifyContext(
 		context.Background(),
 		syscall.SIGINT,
@@ -30,6 +31,11 @@ func Setup() (context.Context, context.CancelFunc, *Config) {
 
 	log.Setup(log.SlogLevel(conf.LogLevel))
 	slog.Debug("loaded config", "config", conf)
+
+	tracing.InitTracer(tracing.TracingOpts{
+		ServiceName: "ticktick-events",
+		SampleRate:  1,
+	}, version)
 
 	return ctx, cancel, conf
 }

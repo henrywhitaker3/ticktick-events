@@ -1,5 +1,7 @@
 FROM golang:1.27 AS gob
 
+ARG VERSION="unknown"
+
 WORKDIR /build
 
 COPY . /build/
