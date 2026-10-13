@@ -20,6 +20,8 @@ func main() {
 	ctx, cancel, conf := config.Setup(version)
 	defer cancel()
 
+	metrics := metrics.New(8080)
+
 	host, err := runtime.NewHost(conf.Runtime)
 	if err != nil {
 		slog.Error("init actor runtime", "error", err)
@@ -46,7 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 	go func() {
-		if err := metrics.New(8080).Run(ctx); err != nil {
+		if err := metrics.Run(ctx); err != nil {
 			slog.Error("run metrics server", "error", err)
 			os.Exit(1)
 		}

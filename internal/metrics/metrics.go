@@ -30,6 +30,7 @@ func New(port int) *Server {
 
 	exporter, _ := otelprom.New(
 		otelprom.WithRegisterer(prometheus.DefaultRegisterer),
+		otelprom.WithoutTargetInfo(),
 	)
 	provider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(exporter),
