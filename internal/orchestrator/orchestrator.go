@@ -31,6 +31,7 @@ func New(opts OrchestratorOpts) *Orchestrator {
 	return &Orchestrator{
 		client:   opts.TickTick,
 		interval: opts.Interval,
+		service:  opts.Service,
 	}
 }
 
@@ -62,7 +63,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 						task.Overdue,
 						t,
 					); err != nil {
-						slog.ErrorContext(ctx, "invoke overdue", "task", t)
+						slog.ErrorContext(ctx, "invoke overdue", "task", t, "error", err)
 					}
 				}
 			}

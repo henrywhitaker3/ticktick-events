@@ -65,47 +65,65 @@ func Register(host *local.Host, opts Opts) error {
 }
 
 const (
-	Overdue  = "overdue"
-	ReNotify = "renotify"
+	Overdue = "overdue"
 )
 
 func (t *Task) Invoke(ctx context.Context, method string, data actor.Envelope) (any, error) {
+	switch method {
+	case Overdue:
+		return t.overdue(ctx, data)
+	default:
+		return nil, fmt.Errorf("unknown invoke method %s", method)
+	}
+}
+
+func (t *Task) overdue(ctx context.Context, data actor.Envelope) (any, error) {
 	state, err := t.client.GetState(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get task state: %w", err)
 	}
-
-	switch method {
-	case Overdue:
-		var task client.Task
-		if err := data.Decode(&task); err != nil {
-			return nil, fmt.Errorf("decode data into client.Task: %w", err)
-		}
-		state.Task = &task
-		if err := t.processTask(ctx, &state); err != nil {
-			return nil, fmt.Errorf("process overdue task: %w", err)
-		}
-	default:
-		return nil, fmt.Errorf("unknown invoke method %s", method)
+	var task client.Task
+	if err := data.Decode(&task); err != nil {
+		return nil, fmt.Errorf("decode task data: %w", err)
 	}
-
+	state.Task = &task
 	if err := t.client.SetState(ctx, state, nil); err != nil {
-		return nil, fmt.Errorf("write task state: %w", err)
+		return nil, fmt.Errorf("set task state: %w", err)
 	}
-
-	if state.Completed {
-		_ = t.client.DeleteState(ctx)
-		t.client.Halt()
+	if _, _, err := t.client.Dispatch(ctx, Overdue, nil); err != nil {
+		return nil, fmt.Errorf("dispatch overdue job: %w", err)
 	}
-
 	return state, nil
 }
 
-func (t *Task) processTask(ctx context.Context, state *taskState) error {
+func (t *Task) Job(ctx context.Context, method string, data actor.Envelope) error {
+	switch method {
+	case Overdue:
+		return t.processOverdueJob(ctx)
+	default:
+		return fmt.Errorf("unknown job method %s", method)
+	}
+}
+
+func (t *Task) processOverdueJob(ctx context.Context) error {
+	state, err := t.client.GetState(ctx)
+	if err != nil {
+		return fmt.Errorf("get task state: %w", err)
+	}
+	defer func() {
+		if state.Completed {
+			_ = t.client.DeleteState(ctx)
+			t.client.Halt()
+			return
+		}
+	}()
+
 	if state.Task == nil {
 		return fmt.Errorf("cannot process nil task")
 	}
 	ctx = log.WithLogAttr(ctx, "task", state.Task)
+
+	slog.InfoContext(ctx, "handling overdue task job")
 
 	if state.LastNotifiedAt != nil && state.LastNotifiedAt.After(time.Now().Add(-time.Minute*10)) {
 		slog.DebugContext(ctx, "task last notified less than 10 mins ago")
@@ -123,10 +141,6 @@ func (t *Task) processTask(ctx context.Context, state *taskState) error {
 	if err != nil {
 		return fmt.Errorf("refresh task data: %w", err)
 	}
-
-	defer func() {
-		state.Task = &task
-	}()
 
 	if task.Status > 0 || task.CompletedTime != nil || task.DueDate != state.Task.DueDate {
 		slog.DebugContext(ctx, "task completed")
@@ -146,6 +160,11 @@ func (t *Task) processTask(ctx context.Context, state *taskState) error {
 	state.NotificationCounter++
 	now := time.Now()
 	state.LastNotifiedAt = &now
+	state.Task = &task
+
+	if err := t.client.SetState(ctx, state, nil); err != nil {
+		return fmt.Errorf("store task state: %w", err)
+	}
 
 	return nil
 }

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/client"
 	"github.com/henrywhitaker3/ticktick-events/internal/config"
@@ -20,15 +22,31 @@ func main() {
 		slog.Error("init actor runtime", "error", err)
 		os.Exit(1)
 	}
-
 	ticktick := client.New(string(conf.TickTickToken))
 	pavlok := client.NewPavlokClient(string(conf.PavlokToken))
-	task.Register(host, task.Opts{
+	if err := task.Register(host, task.Opts{
 		Ticktick: ticktick,
 		Pavlok:   pavlok,
 		Sleep:    conf.InteractionWait,
 		Quiet:    conf.QuietTimes,
-	})
+	}); err != nil {
+		slog.Error("register task actor", "error", err)
+		os.Exit(1)
+	}
+	go func() {
+		if err := host.Run(ctx); err != nil {
+			slog.Error("start actor runtime", "error", err)
+			os.Exit(1)
+		}
+	}()
+	waitCtx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+	select {
+	case <-waitCtx.Done():
+		slog.Error("wait for runtime to be ready", "error", waitCtx.Err())
+		os.Exit(1)
+	case <-host.Ready():
+	}
 
 	orch := orchestrator.New(orchestrator.OrchestratorOpts{
 		TickTick: ticktick,

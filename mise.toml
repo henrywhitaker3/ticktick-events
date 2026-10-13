@@ -1,6 +1,12 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+
 [tools]
 go = "1.27.2"
 gotestsum = "1.13.0"
+
+[tasks.psk]
+description = "Generate a runtime PSK"
+run = "openssl rand -hex 32"
 
 [tasks.serve]
 description = "Run the CLI locally"
@@ -17,7 +23,9 @@ TICKTICK_TOKEN=$(op read "op://${usage_vault}/${usage_item}/${usage_field}")
 export TICKTICK_TOKEN
 PAVLOK_TOKEN=$(op read "op://${usage_vault}/${usage_pavlok_item}/${usage_pavlok_field}")
 export PAVLOK_TOKEN
-export DB_URL="postgres://tick:tick@postgres:5432/tick?sslmode=disable"
+export RUNTIME_DB_URL="postgres://tick:tick@localhost:5432/tick?sslmode=disable"
+export RUNTIME_HOST="$HOST"
+export RUNTIME_PSK="$(mise run psk)"
 go run main.go --log-level ${usage_log_level} | jq
 '''
 
