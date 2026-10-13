@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/ticktickapi"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -59,7 +60,7 @@ func New(token string) *TickTickClient {
 func newClient(token, baseURL string, httpClient *http.Client) (*TickTickClient, error) {
 	api, err := ticktickapi.NewClientWithResponses(
 		baseURL,
-		ticktickapi.WithHTTPClient(httpClient),
+		ticktickapi.WithHTTPClient(newInstrumentedHTTPClient(httpClient, "ticktick HTTP request")),
 		ticktickapi.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
 			req.Header.Set("Accept", "application/json")
 			req.Header.Set("Authorization", "Bearer "+token)
@@ -71,6 +72,27 @@ func newClient(token, baseURL string, httpClient *http.Client) (*TickTickClient,
 	}
 
 	return &TickTickClient{api: api}, nil
+}
+
+// newInstrumentedHTTPClient returns a copy of httpClient whose transport emits
+// an OpenTelemetry client span for every HTTP round trip. Copying leaves a
+// caller-supplied client unchanged while preserving its configuration.
+func newInstrumentedHTTPClient(httpClient *http.Client, spanName string) *http.Client {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+
+	instrumented := *httpClient
+	instrumented.Transport = otelhttp.NewTransport(
+		httpClient.Transport,
+		otelhttp.WithSpanNameFormatter(func(operation string, req *http.Request) string {
+			if req == nil {
+				return spanName
+			}
+			return fmt.Sprintf("%s %s", req.Method, req.URL.Path)
+		}),
+	)
+	return &instrumented
 }
 
 // GetOverdueTasks retrieves undone tasks from the last 14 days and returns the

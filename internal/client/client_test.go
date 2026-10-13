@@ -8,6 +8,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -124,6 +129,67 @@ func TestParseTickTickTime(t *testing.T) {
 	want := time.Date(2026, time.March, 4, 23, 58, 20, 0, time.UTC)
 	if !got.Equal(want) {
 		t.Errorf("parseTickTickTime() = %v, want %v", got, want)
+	}
+}
+
+func TestTickTickClientEmitsHTTPSpan(t *testing.T) {
+	recorder := installSpanRecorder(t)
+	client, err := newClient("test-token", "https://ticktick.test", &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return jsonResponse(request, `{"id":"task-1","title":"Task","status":0}`), nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("newClient() error = %v", err)
+	}
+
+	if _, err := client.GetTask(context.Background(), "project-1", "task-1"); err != nil {
+		t.Fatalf("GetTask() error = %v", err)
+	}
+
+	assertClientSpan(t, recorder.Ended(), "ticktick HTTP request")
+}
+
+func TestPavlokClientEmitsHTTPSpan(t *testing.T) {
+	recorder := installSpanRecorder(t)
+	client := newPavlokClient("test-token", &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return jsonResponse(request, `{}`), nil
+		}),
+	})
+
+	if err := client.Send(context.Background(), Task{Title: "Task"}, Zap); err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+
+	assertClientSpan(t, recorder.Ended(), "pavlok HTTP request")
+}
+
+func installSpanRecorder(t *testing.T) *tracetest.SpanRecorder {
+	t.Helper()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		if err := provider.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown tracer provider: %v", err)
+		}
+	})
+	return recorder
+}
+
+func assertClientSpan(t *testing.T, spans []sdktrace.ReadOnlySpan, wantName string) {
+	t.Helper()
+	if len(spans) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(spans))
+	}
+	if got := spans[0].Name(); got != wantName {
+		t.Errorf("span name = %q, want %q", got, wantName)
+	}
+	if got := spans[0].SpanKind(); got != trace.SpanKindClient {
+		t.Errorf("span kind = %v, want %v", got, trace.SpanKindClient)
 	}
 }
 
