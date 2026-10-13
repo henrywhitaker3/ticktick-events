@@ -36,6 +36,8 @@ github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/grafana/otel-profiling-go v0.5.1 h1:stVPKAFZSa7eGiqbYuG25VcqYksR6iWvF3YH66t4qL8=
 github.com/grafana/otel-profiling-go v0.5.1/go.mod h1:ftN/t5A/4gQI19/8MoWurBEtC6gFw8Dns1sJZ9W4Tls=
+github.com/grafana/otel-profiling-go v0.7.0 h1:Q6CBLSgAnYmNQNNrj4ipG0S/K/K8iazA9E4kYRzZf0I=
+github.com/grafana/otel-profiling-go v0.7.0/go.mod h1:Gt7LHg3HEfBoU8ZVArhqYaiA65EjcBe3nd3+arX6eMY=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.31.0 h1:Bd7KaOxzULLxtZ/K5s1aLbWhR0+5RToO65TXHsf3bqQ=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.31.0/go.mod h1:nN7ts3dFXKtCZWc//yfkpcQNKJABg16/uDVAZpLDalo=
 github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k=
@@ -44,6 +46,8 @@ github.com/henrywhitaker3/ctxgen v1.0.1 h1:T1tsyUKS4ymBkqP9KBrVDh5fskzkdm2zTfLH0
 github.com/henrywhitaker3/ctxgen v1.0.1/go.mod h1:Q9fBma6LqFfEqJbltrc1Icdp9YUA5M3UVcz7tqGfPLc=
 github.com/henrywhitaker3/windowframe/v2 v2.6.2 h1:8DAI2zw3rA7V/BWFrjr0R/TNOt+m8hlbHaQoqlwZC5k=
 github.com/henrywhitaker3/windowframe/v2 v2.6.2/go.mod h1:6rf8JOybwugxqSjIObfpBXf3MuDN2rgiReZdRTYVZnw=
+github.com/henrywhitaker3/windowframe/v2 v2.6.3 h1:/EWXf55kBIN9l7s8kQyfjddB73cQmqetCn6qf4+BsyM=
+github.com/henrywhitaker3/windowframe/v2 v2.6.3/go.mod h1:wD6FkjE5VMP6pUfUOYAJqwho5dUQcTUEnPonHGin8/o=
 github.com/italypaleale/francis v0.1.1 h1:zn6gY5EcAAvcalBZQlgbhG9zIbJEI7CCk0KolMaeMj8=
 github.com/italypaleale/francis v0.1.1/go.mod h1:7bPR1A+YV9+pCoRWaX1w6fwxYjjyCsBQbFOHpNjASuo=
 github.com/italypaleale/go-kit v1.2.5 h1:LWhbaaBKABeGELpgRl1iIGuP5ZhlwJK807HUjm5QbGM=
