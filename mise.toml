@@ -27,6 +27,7 @@ export RUNTIME_DB_URL="postgres://tick:tick@localhost:5432/tick?sslmode=disable"
 export RUNTIME_HOST="$HOST"
 export RUNTIME_PSK="$(mise run psk)"
 export LOG_LEVEL="{{ usage.log_level }}"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
 go run main.go | jq
 '''
 
