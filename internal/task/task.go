@@ -12,6 +12,7 @@ import (
 	"github.com/henrywhitaker3/windowframe/v2/log"
 	"github.com/italypaleale/francis/actor"
 	"github.com/italypaleale/francis/host/local"
+	"github.com/sosodev/duration"
 )
 
 const (
@@ -38,6 +39,7 @@ type Task struct {
 type taskState struct {
 	Task                *client.Task
 	LastNotifiedAt      *time.Time
+	LastAlarmAt         time.Time
 	NotificationCounter int
 	Completed           bool
 	Onboarded           bool
@@ -70,6 +72,9 @@ func Register(host *local.Host, opts Opts) error {
 
 const (
 	Overdue = "overdue"
+
+	notifyInterval   = time.Minute * 10
+	alarmGracePeriod = notifyInterval + (time.Minute * 5)
 )
 
 func (t *Task) Invoke(ctx context.Context, method string, data actor.Envelope) (any, error) {
@@ -86,22 +91,32 @@ func (t *Task) overdue(ctx context.Context, data actor.Envelope) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get task state: %w", err)
 	}
-	if state.Onboarded {
-		return state, nil
-	}
-
 	var task client.Task
 	if err := data.Decode(&task); err != nil {
 		return nil, fmt.Errorf("decode task data: %w", err)
 	}
+
+	if state.Task != nil && state.Onboarded && state.Task.DueDate.Equal(task.DueDate) &&
+		!state.LastAlarmAt.Before(time.Now().Add(-alarmGracePeriod)) {
+		return state, nil
+	}
+
 	if err := t.client.SetAlarm(ctx, Overdue, actor.AlarmProperties{
 		DueTime:  time.Now().Add(t.sleep),
-		Interval: "PT10M",
+		Interval: duration.FromTimeDuration(notifyInterval).String(),
 	}); err != nil {
 		return nil, fmt.Errorf("setup alert alarm: %w", err)
 	}
+
+	dueChanged := state.Task == nil || !state.Task.DueDate.Equal(task.DueDate)
+	if dueChanged {
+		state.NotificationCounter = 0
+		state.Completed = false
+	}
+
 	state.Task = &task
 	state.Onboarded = true
+	state.LastAlarmAt = time.Now()
 	if err := t.client.SetState(ctx, state, nil); err != nil {
 		return nil, fmt.Errorf("set task state: %w", err)
 	}
@@ -128,6 +143,11 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 	}
 	ctx = log.WithLogAttr(ctx, "state", state)
 	slog.InfoContext(ctx, "handling overdue task job")
+
+	state.LastAlarmAt = time.Now()
+	if err := t.client.SetState(ctx, state, nil); err != nil {
+		return fmt.Errorf("store task state: %w", err)
+	}
 
 	if state.Completed {
 		return nil
@@ -157,7 +177,9 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 	}
 
 	slog.InfoContext(ctx, "sending zap")
-	if err := t.pavlok.Send(ctx, task, client.Zap); err != nil {
+	pctx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+	if err := t.pavlok.Send(pctx, task, client.Zap); err != nil {
 		return fmt.Errorf("send zap: %w", err)
 	}
 

@@ -6,6 +6,7 @@ require (
 	github.com/henrywhitaker3/windowframe/v2 v2.6.2
 	github.com/italypaleale/francis v0.1.1
 	github.com/oapi-codegen/runtime v1.7.0
+	github.com/sosodev/duration v1.4.0
 	github.com/stretchr/testify v1.12.1
 )
 
