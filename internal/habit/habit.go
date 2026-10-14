@@ -105,7 +105,7 @@ func (h *Habit) processAlert(ctx context.Context) error {
 		return nil
 	}
 	if checkedInForAlert(state.Habit.LastCheckin, state.NextAlarm) {
-		slog.DebugContext(ctx, "habit already checked in")
+		slog.InfoContext(ctx, "habit already checked in")
 		state.LastAlertFor = &state.NextAlarm
 		if err := h.client.SetState(ctx, state, nil); err != nil {
 			return fmt.Errorf("set checked-in habit state: %w", err)
