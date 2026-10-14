@@ -185,15 +185,21 @@ func (c *TickTickClient) GetHabits(ctx context.Context) ([]Habit, error) {
 	if err := validateHabitsResponse(response); err != nil {
 		return nil, err
 	}
-	if len(*response.JSON200) == 0 {
+	remindedHabits := make([]ticktickapi.Habit, 0, len(*response.JSON200))
+	for _, habit := range *response.JSON200 {
+		if hasHabitReminder(habit) {
+			remindedHabits = append(remindedHabits, habit)
+		}
+	}
+	if len(remindedHabits) == 0 {
 		return []Habit{}, nil
 	}
 
 	slog.DebugContext(ctx, "got raw habits", "habits", response.JSON200)
 
 	now := time.Now().UTC()
-	habitIDs := make([]string, 0, len(*response.JSON200))
-	for _, habit := range *response.JSON200 {
+	habitIDs := make([]string, 0, len(remindedHabits))
+	for _, habit := range remindedHabits {
 		habitIDs = append(habitIDs, habit.Id)
 	}
 	lastCheckins, err := c.getHabitCheckins(ctx, habitIDs, now)
@@ -201,8 +207,8 @@ func (c *TickTickClient) GetHabits(ctx context.Context) ([]Habit, error) {
 		return nil, err
 	}
 
-	habits := make([]Habit, 0, len(*response.JSON200))
-	for _, source := range *response.JSON200 {
+	habits := make([]Habit, 0, len(remindedHabits))
+	for _, source := range remindedHabits {
 		habit, err := habitFromAPI(source, lastCheckins[source.Id], now)
 		if err != nil {
 			return nil, fmt.Errorf("map habit %q: %w", source.Id, err)
@@ -222,6 +228,9 @@ func (c *TickTickClient) GetHabit(ctx context.Context, habitID string) (Habit, e
 	if err := validateHabitResponse(response); err != nil {
 		return Habit{}, err
 	}
+	if !hasHabitReminder(*response.JSON200) {
+		return Habit{}, fmt.Errorf("get habit %q: no reminder configured", response.JSON200.Id)
+	}
 
 	now := time.Now().UTC()
 	lastCheckins, err := c.getHabitCheckins(ctx, []string{habitID}, now)
@@ -234,6 +243,10 @@ func (c *TickTickClient) GetHabit(ctx context.Context, habitID string) (Habit, e
 		return Habit{}, fmt.Errorf("map habit %q: %w", response.JSON200.Id, err)
 	}
 	return habit, nil
+}
+
+func hasHabitReminder(habit ticktickapi.Habit) bool {
+	return habit.Reminders != nil && len(*habit.Reminders) > 0
 }
 
 func (c *TickTickClient) getHabitCheckins(

@@ -136,7 +136,8 @@ func TestGetHabits(t *testing.T) {
 				}
 				return jsonResponse(request, `[
   {"id":"habit-1","name":"Read","status":0,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","reminders":["TRIGGER:P0DT9H0M0S"],"targetStartDate":20261001},
-  {"id":"habit-2","name":"Exercise","status":2}
+  {"id":"habit-2","name":"Exercise","status":2,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","reminders":["09:30"]},
+  {"id":"habit-3","name":"No reminder","status":0}
 ]`), nil
 			case "/open/v1/habit/checkins":
 				if got := request.URL.Query().Get("habitIds"); got != "habit-1,habit-2" {
@@ -181,8 +182,30 @@ func TestGetHabits(t *testing.T) {
 	}
 
 	second := habits[1]
-	if second.LastCheckin != nil || !second.NextCheckin.IsZero() {
+	if second.LastCheckin != nil {
 		t.Errorf("GetHabits() absent check-ins = %#v", second)
+	}
+	if second.NextCheckin.Hour() != 9 || second.NextCheckin.Minute() != 30 {
+		t.Errorf("NextCheckin = %v, want a 09:30 reminder", second.NextCheckin)
+	}
+}
+
+func TestGetHabitRejectsHabitWithoutReminder(t *testing.T) {
+	client, err := newClient("test-token", "https://ticktick.test", &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Path != "/open/v1/habit/habit-1" {
+				t.Errorf("path = %q, want /open/v1/habit/habit-1", request.URL.Path)
+			}
+			return jsonResponse(request, `{"id":"habit-1","name":"No reminder","status":0}`), nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("newClient() error = %v", err)
+	}
+
+	_, err = client.GetHabit(context.Background(), "habit-1")
+	if err == nil || !strings.Contains(err.Error(), "no reminder configured") {
+		t.Fatalf("GetHabit() error = %v, want no reminder configured", err)
 	}
 }
 

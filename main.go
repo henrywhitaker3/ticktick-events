@@ -41,8 +41,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := habit.Register(host, habit.Opts{
-		Pavlok: pavlok,
-		Quiet:  conf.QuietTimes,
+		TickTick: ticktick,
+		Pavlok:   pavlok,
+		Quiet:    conf.QuietTimes,
 	}); err != nil {
 		slog.Error("register habit actor", "error", err)
 		os.Exit(1)
