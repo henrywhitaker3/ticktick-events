@@ -114,8 +114,10 @@ func (h *Habit) processAlert(ctx context.Context) error {
 	}
 
 	slog.InfoContext(ctx, "sending zap for missed habit")
+	pctx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
 	if err := h.pavlok.Send(
-		ctx,
+		pctx,
 		fmt.Sprintf("Overdue habit: %s", state.Habit.Name),
 		client.Zap,
 	); err != nil {
