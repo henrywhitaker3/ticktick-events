@@ -256,10 +256,11 @@ func (c *TickTickClient) getHabitCheckins(
 	habitIDs []string,
 	now time.Time,
 ) (map[string]time.Time, error) {
+	from, to := habitCheckinDateRange(now)
 	response, err := c.api.GetHabitCheckinsWithResponse(ctx, &ticktickapi.GetHabitCheckinsParams{
 		HabitIds: strings.Join(habitIDs, ","),
-		From:     tickTickDateStamp(now.AddDate(0, 0, -14)),
-		To:       tickTickDateStamp(now),
+		From:     from,
+		To:       to,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get habit check-ins: %w", err)
@@ -285,6 +286,15 @@ func (c *TickTickClient) getHabitCheckins(
 		}
 	}
 	return latest, nil
+}
+
+// habitCheckinDateRange returns a local-calendar range that includes today.
+// Requesting tomorrow as the end also includes today if TickTick treats its
+// documented end-date parameter as an exclusive bound.
+func habitCheckinDateRange(now time.Time) (from, to int) {
+	today := startOfDay(now)
+	return tickTickDateStamp(today.AddDate(0, 0, -14)),
+		tickTickDateStamp(today.AddDate(0, 0, 1))
 }
 
 func validateUndoneTasksResponse(response *ticktickapi.ListUndoneTasksResponse) error {
@@ -505,7 +515,10 @@ func habitReminderDuration(reminder string) (time.Duration, error) {
 
 func habitRecurrenceStart(habit ticktickapi.Habit, now time.Time) time.Time {
 	if habit.TargetStartDate != nil {
-		if start, err := parseTickTickDateStampInLocation(*habit.TargetStartDate, now.Location()); err == nil {
+		if start, err := parseTickTickDateStampInLocation(
+			*habit.TargetStartDate,
+			now.Location(),
+		); err == nil {
 			return start
 		}
 	}

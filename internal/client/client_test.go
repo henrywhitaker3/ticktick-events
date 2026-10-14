@@ -256,6 +256,20 @@ func TestGetHabit(t *testing.T) {
 	}
 }
 
+func TestHabitCheckinDateRangeIncludesToday(t *testing.T) {
+	location, err := time.LoadLocation("Europe/London")
+	if err != nil {
+		t.Fatalf("load Europe/London location: %v", err)
+	}
+
+	from, to := habitCheckinDateRange(
+		time.Date(2026, time.October, 14, 12, 1, 0, 0, location),
+	)
+	if from != 20260930 || to != 20261015 {
+		t.Errorf("habitCheckinDateRange() = (%d, %d), want (20260930, 20261015)", from, to)
+	}
+}
+
 func TestNextHabitCheckin(t *testing.T) {
 	now := time.Date(2026, time.October, 14, 15, 0, 0, 0, time.UTC)
 	dailyRule := "RRULE:FREQ=DAILY;INTERVAL=1"
