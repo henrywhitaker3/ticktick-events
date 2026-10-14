@@ -7,7 +7,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+var (
+	zapsSent = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "zaps_sent_total",
+	})
+)
+
+func init() {
+	_ = prometheus.DefaultRegisterer.Register(zapsSent)
+}
 
 const pavlokStimulusURL = "https://api.pavlok.com/api/v5/stimulus/send"
 
@@ -84,6 +96,8 @@ func (p *PavlokClient) Send(ctx context.Context, task string, s Stimulus) error 
 		}
 		return fmt.Errorf("send stimulus: %s", string(body))
 	}
+
+	zapsSent.Inc()
 
 	return nil
 }

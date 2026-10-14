@@ -12,23 +12,12 @@ import (
 	"github.com/henrywhitaker3/windowframe/v2/log"
 	"github.com/italypaleale/francis/actor"
 	"github.com/italypaleale/francis/host/local"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sosodev/duration"
 )
 
 const (
 	Type = "task"
 )
-
-var (
-	zapsSent = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "zaps_sent_total",
-	})
-)
-
-func init() {
-	_ = prometheus.DefaultRegisterer.Register(zapsSent)
-}
 
 type TaskGetter interface {
 	GetTask(ctx context.Context, projectID, taskID string) (client.Task, error)
@@ -197,7 +186,6 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 	); err != nil {
 		return fmt.Errorf("send zap: %w", err)
 	}
-	zapsSent.Inc()
 
 	state.NotificationCounter++
 	now := time.Now()
