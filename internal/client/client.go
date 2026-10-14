@@ -27,7 +27,9 @@ const (
 	TaskStatusNormal = 0
 )
 
-var tickTickReminderDuration = regexp.MustCompile(`^TRIGGER(?:;RELATED=(?:START|END))?:P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$`)
+var tickTickReminderDuration = regexp.MustCompile(
+	`^TRIGGER(?:;RELATED=(?:START|END))?:P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$`,
+)
 
 type TickTickClient struct {
 	api ticktickapi.ClientWithResponsesInterface
@@ -116,7 +118,7 @@ func newInstrumentedHTTPClient(httpClient *http.Client, spanName string) *http.C
 // subset with a due date before the current time. TickTick's undone-tasks
 // endpoint does not accept a date range longer than 14 days.
 func (c *TickTickClient) GetOverdueTasks(ctx context.Context) ([]Task, error) {
-	now := time.Now().UTC()
+	now := time.Now()
 	response, err := c.api.ListUndoneTasksWithResponse(
 		ctx,
 		ticktickapi.ListUndoneTasksJSONRequestBody{
@@ -197,7 +199,7 @@ func (c *TickTickClient) GetHabits(ctx context.Context) ([]Habit, error) {
 
 	slog.DebugContext(ctx, "got raw habits", "habits", response.JSON200)
 
-	now := time.Now().UTC()
+	now := time.Now()
 	habitIDs := make([]string, 0, len(remindedHabits))
 	for _, habit := range remindedHabits {
 		habitIDs = append(habitIDs, habit.Id)
@@ -232,7 +234,7 @@ func (c *TickTickClient) GetHabit(ctx context.Context, habitID string) (Habit, e
 		return Habit{}, fmt.Errorf("get habit %q: no reminder configured", response.JSON200.Id)
 	}
 
-	now := time.Now().UTC()
+	now := time.Now()
 	lastCheckins, err := c.getHabitCheckins(ctx, []string{habitID}, now)
 	if err != nil {
 		return Habit{}, err
@@ -439,14 +441,14 @@ func nextHabitCheckin(habit ticktickapi.Habit, now time.Time) (time.Time, error)
 		return time.Time{}, fmt.Errorf("parse reminders for habit %q: %w", habit.Id, err)
 	}
 	if len(reminders) == 0 {
-		return occurrence, nil
+		return occurrence.UTC(), nil
 	}
 
 	for !occurrence.IsZero() {
 		for _, reminder := range reminders {
 			candidate := occurrence.Add(reminder)
 			if !candidate.Before(now) {
-				return candidate, nil
+				return candidate.UTC(), nil
 			}
 		}
 		occurrence = rule.After(occurrence, false)
@@ -474,7 +476,11 @@ func habitReminderDurations(reminders *[]string) ([]time.Duration, error) {
 
 func habitReminderDuration(reminder string) (time.Duration, error) {
 	if clockTime, err := time.Parse("15:04", reminder); err == nil {
-		return time.Duration(clockTime.Hour())*time.Hour + time.Duration(clockTime.Minute())*time.Minute, nil
+		return time.Duration(
+			clockTime.Hour(),
+		)*time.Hour + time.Duration(
+			clockTime.Minute(),
+		)*time.Minute, nil
 	}
 
 	parts := tickTickReminderDuration.FindStringSubmatch(reminder)
@@ -499,24 +505,28 @@ func habitReminderDuration(reminder string) (time.Duration, error) {
 
 func habitRecurrenceStart(habit ticktickapi.Habit, now time.Time) time.Time {
 	if habit.TargetStartDate != nil {
-		if start, err := parseTickTickDateStamp(*habit.TargetStartDate); err == nil {
+		if start, err := parseTickTickDateStampInLocation(*habit.TargetStartDate, now.Location()); err == nil {
 			return start
 		}
 	}
 	if habit.CreatedTime != nil {
 		if created, err := parseTickTickTime(*habit.CreatedTime); err == nil {
-			return startOfDay(created)
+			return startOfDay(created.In(now.Location()))
 		}
 	}
 	return startOfDay(now)
 }
 
 func parseTickTickDateStamp(stamp int) (time.Time, error) {
+	return parseTickTickDateStampInLocation(stamp, time.Local)
+}
+
+func parseTickTickDateStampInLocation(stamp int, location *time.Location) (time.Time, error) {
 	value := strconv.Itoa(stamp)
 	if len(value) != len(tickTickDateLayout) {
 		return time.Time{}, fmt.Errorf("expected TickTick date stamp: %d", stamp)
 	}
-	parsed, err := time.Parse(tickTickDateLayout, value)
+	parsed, err := time.ParseInLocation(tickTickDateLayout, value, location)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("parse TickTick date stamp %d: %w", stamp, err)
 	}
@@ -524,7 +534,7 @@ func parseTickTickDateStamp(stamp int) (time.Time, error) {
 }
 
 func tickTickDateStamp(value time.Time) int {
-	stamp, err := strconv.Atoi(value.UTC().Format(tickTickDateLayout))
+	stamp, err := strconv.Atoi(value.Format(tickTickDateLayout))
 	if err != nil {
 		panic(fmt.Sprintf("format TickTick date stamp: %v", err))
 	}
@@ -532,8 +542,7 @@ func tickTickDateStamp(value time.Time) int {
 }
 
 func startOfDay(value time.Time) time.Time {
-	value = value.UTC()
-	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, value.Location())
 }
 
 func stringValue(value *string) string {

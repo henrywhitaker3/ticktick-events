@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/client"
-	"github.com/henrywhitaker3/ticktick-events/internal/config"
 	"github.com/henrywhitaker3/windowframe/v2/log"
 	"github.com/italypaleale/francis/actor"
 	"github.com/italypaleale/francis/host/local"
@@ -27,7 +26,6 @@ type Habit struct {
 	pavlok           StimulusSender
 	ticktick         HabitGetter
 	sleep            time.Duration
-	quiet            config.QuietTimes
 	maxNotifications int
 }
 
@@ -41,7 +39,6 @@ type habitState struct {
 type Opts struct {
 	TickTick HabitGetter
 	Pavlok   StimulusSender
-	Quiet    config.QuietTimes
 }
 
 const (
@@ -60,7 +57,6 @@ func New(opts Opts) actor.Factory {
 			client:   actor.NewActorClient[habitState](Type, actorID, service),
 			ticktick: opts.TickTick,
 			pavlok:   opts.Pavlok,
-			quiet:    opts.Quiet,
 		}
 	}
 }
@@ -114,11 +110,6 @@ func (h *Habit) processAlert(ctx context.Context) error {
 		if err := h.client.SetState(ctx, state, nil); err != nil {
 			return fmt.Errorf("set checked-in habit state: %w", err)
 		}
-		return nil
-	}
-
-	if h.quiet.In(time.Now()) {
-		slog.DebugContext(ctx, "not sending zap during quiet times")
 		return nil
 	}
 
