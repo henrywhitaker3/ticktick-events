@@ -4,7 +4,10 @@ package client
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +26,8 @@ const (
 
 	TaskStatusNormal = 0
 )
+
+var tickTickReminderDuration = regexp.MustCompile(`^TRIGGER(?:;RELATED=(?:START|END))?:P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$`)
 
 type TickTickClient struct {
 	api ticktickapi.ClientWithResponsesInterface
@@ -184,6 +189,8 @@ func (c *TickTickClient) GetHabits(ctx context.Context) ([]Habit, error) {
 		return []Habit{}, nil
 	}
 
+	slog.DebugContext(ctx, "got raw habits", "habits", response.JSON200)
+
 	now := time.Now().UTC()
 	habitIDs := make([]string, 0, len(*response.JSON200))
 	for _, habit := range *response.JSON200 {
@@ -229,7 +236,11 @@ func (c *TickTickClient) GetHabit(ctx context.Context, habitID string) (Habit, e
 	return habit, nil
 }
 
-func (c *TickTickClient) getHabitCheckins(ctx context.Context, habitIDs []string, now time.Time) (map[string]time.Time, error) {
+func (c *TickTickClient) getHabitCheckins(
+	ctx context.Context,
+	habitIDs []string,
+	now time.Time,
+) (map[string]time.Time, error) {
 	response, err := c.api.GetHabitCheckinsWithResponse(ctx, &ticktickapi.GetHabitCheckinsParams{
 		HabitIds: strings.Join(habitIDs, ","),
 		From:     tickTickDateStamp(now.AddDate(0, 0, -14)),
@@ -247,7 +258,11 @@ func (c *TickTickClient) getHabitCheckins(ctx context.Context, habitIDs []string
 		for _, checkin := range checkinDocument.Checkins {
 			checkinTime, err := habitCheckinTime(checkin)
 			if err != nil {
-				return nil, fmt.Errorf("parse check-in for habit %q: %w", checkinDocument.HabitId, err)
+				return nil, fmt.Errorf(
+					"parse check-in for habit %q: %w",
+					checkinDocument.HabitId,
+					err,
+				)
 			}
 			if previous, ok := latest[checkinDocument.HabitId]; !ok || checkinTime.After(previous) {
 				latest[checkinDocument.HabitId] = checkinTime
@@ -405,7 +420,68 @@ func nextHabitCheckin(habit ticktickapi.Habit, now time.Time) (time.Time, error)
 	}
 	rule.DTStart(habitRecurrenceStart(habit, now))
 
-	return rule.After(startOfDay(now), true), nil
+	occurrence := rule.After(startOfDay(now), true)
+	reminders, err := habitReminderDurations(habit.Reminders)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse reminders for habit %q: %w", habit.Id, err)
+	}
+	if len(reminders) == 0 {
+		return occurrence, nil
+	}
+
+	for !occurrence.IsZero() {
+		for _, reminder := range reminders {
+			candidate := occurrence.Add(reminder)
+			if !candidate.Before(now) {
+				return candidate, nil
+			}
+		}
+		occurrence = rule.After(occurrence, false)
+	}
+
+	return time.Time{}, nil
+}
+
+func habitReminderDurations(reminders *[]string) ([]time.Duration, error) {
+	if reminders == nil {
+		return nil, nil
+	}
+
+	durations := make([]time.Duration, 0, len(*reminders))
+	for _, reminder := range *reminders {
+		duration, err := habitReminderDuration(reminder)
+		if err != nil {
+			return nil, err
+		}
+		durations = append(durations, duration)
+	}
+	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+	return durations, nil
+}
+
+func habitReminderDuration(reminder string) (time.Duration, error) {
+	if clockTime, err := time.Parse("15:04", reminder); err == nil {
+		return time.Duration(clockTime.Hour())*time.Hour + time.Duration(clockTime.Minute())*time.Minute, nil
+	}
+
+	parts := tickTickReminderDuration.FindStringSubmatch(reminder)
+	if parts == nil {
+		return 0, fmt.Errorf("unsupported reminder %q", reminder)
+	}
+
+	units := []time.Duration{24 * time.Hour, time.Hour, time.Minute, time.Second}
+	var duration time.Duration
+	for index, unit := range units {
+		if parts[index+1] == "" {
+			continue
+		}
+		amount, err := strconv.Atoi(parts[index+1])
+		if err != nil {
+			return 0, fmt.Errorf("parse reminder %q: %w", reminder, err)
+		}
+		duration += time.Duration(amount) * unit
+	}
+	return duration, nil
 }
 
 func habitRecurrenceStart(habit ticktickapi.Habit, now time.Time) time.Time {

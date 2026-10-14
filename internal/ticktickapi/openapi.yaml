@@ -123,6 +123,10 @@ components:
           type: integer
         repeatRule:
           type: string
+        reminders:
+          type: array
+          items:
+            type: string
         targetStartDate:
           type: integer
         createdTime:

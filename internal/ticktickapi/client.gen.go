@@ -30,12 +30,13 @@ type ChecklistItem struct {
 
 // Habit defines model for Habit.
 type Habit struct {
-	CreatedTime     *string `json:"createdTime,omitempty"`
-	Id              string  `json:"id"`
-	Name            string  `json:"name"`
-	RepeatRule      *string `json:"repeatRule,omitempty"`
-	Status          int     `json:"status"`
-	TargetStartDate *int    `json:"targetStartDate,omitempty"`
+	CreatedTime     *string   `json:"createdTime,omitempty"`
+	Id              string    `json:"id"`
+	Name            string    `json:"name"`
+	Reminders       *[]string `json:"reminders,omitempty"`
+	RepeatRule      *string   `json:"repeatRule,omitempty"`
+	Status          int       `json:"status"`
+	TargetStartDate *int      `json:"targetStartDate,omitempty"`
 }
 
 // HabitCheckin defines model for HabitCheckin.

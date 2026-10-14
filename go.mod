@@ -54,6 +54,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/sethvargo/go-envconfig/v2 v2.0.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/teambition/rrule-go v1.8.2 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

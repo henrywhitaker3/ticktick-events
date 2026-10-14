@@ -135,7 +135,7 @@ func TestGetHabits(t *testing.T) {
 					t.Errorf("method = %q, want GET", request.Method)
 				}
 				return jsonResponse(request, `[
-  {"id":"habit-1","name":"Read","status":0,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","targetStartDate":20261001},
+  {"id":"habit-1","name":"Read","status":0,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","reminders":["TRIGGER:P0DT9H0M0S"],"targetStartDate":20261001},
   {"id":"habit-2","name":"Exercise","status":2}
 ]`), nil
 			case "/open/v1/habit/checkins":
@@ -176,8 +176,8 @@ func TestGetHabits(t *testing.T) {
 		!first.LastCheckin.Equal(time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)) {
 		t.Errorf("LastCheckin = %v", first.LastCheckin)
 	}
-	if want := startOfDay(time.Now()); !first.NextCheckin.Equal(want) {
-		t.Errorf("NextCheckin = %v, want %v", first.NextCheckin, want)
+	if first.NextCheckin.Hour() != 9 || first.NextCheckin.Minute() != 0 {
+		t.Errorf("NextCheckin = %v, want a 09:00 reminder", first.NextCheckin)
 	}
 
 	second := habits[1]
@@ -198,7 +198,7 @@ func TestGetHabit(t *testing.T) {
 					t.Errorf("Authorization = %q, want Bearer test-token", got)
 				}
 				return jsonResponse(request, `{
-  "id":"habit-1","name":"Read","status":0,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","targetStartDate":20261001
+  "id":"habit-1","name":"Read","status":0,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","reminders":["09:30"],"targetStartDate":20261001
 }`), nil
 			case "/open/v1/habit/checkins":
 				if got := request.URL.Query().Get("habitIds"); got != "habit-1" {
@@ -228,8 +228,8 @@ func TestGetHabit(t *testing.T) {
 		!habit.LastCheckin.Equal(time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)) {
 		t.Errorf("LastCheckin = %v", habit.LastCheckin)
 	}
-	if want := startOfDay(time.Now()); !habit.NextCheckin.Equal(want) {
-		t.Errorf("NextCheckin = %v, want %v", habit.NextCheckin, want)
+	if habit.NextCheckin.Hour() != 9 || habit.NextCheckin.Minute() != 30 {
+		t.Errorf("NextCheckin = %v, want a 09:30 reminder", habit.NextCheckin)
 	}
 }
 
@@ -238,6 +238,8 @@ func TestNextHabitCheckin(t *testing.T) {
 	dailyRule := "RRULE:FREQ=DAILY;INTERVAL=1"
 	weeklyRule := "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"
 	start := 20261001
+	nineAMReminder := []string{"TRIGGER:P0DT9H0M0S"}
+	halfPastNineReminder := []string{"09:30"}
 
 	testCases := []struct {
 		name  string
@@ -246,13 +248,13 @@ func TestNextHabitCheckin(t *testing.T) {
 	}{
 		{
 			name:  "daily",
-			habit: ticktickapi.Habit{Id: "daily", RepeatRule: &dailyRule, TargetStartDate: &start},
-			want:  time.Date(2026, time.October, 14, 0, 0, 0, 0, time.UTC),
+			habit: ticktickapi.Habit{Id: "daily", RepeatRule: &dailyRule, Reminders: &nineAMReminder, TargetStartDate: &start},
+			want:  time.Date(2026, time.October, 15, 9, 0, 0, 0, time.UTC),
 		},
 		{
 			name:  "weekly days",
-			habit: ticktickapi.Habit{Id: "weekly", RepeatRule: &weeklyRule, TargetStartDate: &start},
-			want:  time.Date(2026, time.October, 14, 0, 0, 0, 0, time.UTC),
+			habit: ticktickapi.Habit{Id: "weekly", RepeatRule: &weeklyRule, Reminders: &halfPastNineReminder, TargetStartDate: &start},
+			want:  time.Date(2026, time.October, 16, 9, 30, 0, 0, time.UTC),
 		},
 	}
 
@@ -306,7 +308,7 @@ func TestPavlokClientEmitsHTTPSpan(t *testing.T) {
 		}),
 	})
 
-	if err := client.Send(context.Background(), Task{Title: "Task"}, Zap); err != nil {
+	if err := client.Send(context.Background(), "Task", Zap); err != nil {
 		t.Fatalf("Send() error = %v", err)
 	}
 

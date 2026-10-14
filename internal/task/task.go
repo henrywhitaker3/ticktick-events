@@ -35,7 +35,7 @@ type TaskGetter interface {
 }
 
 type StimulusSender interface {
-	Send(ctx context.Context, task client.Task, stimulus client.Stimulus) error
+	Send(ctx context.Context, task string, stimulus client.Stimulus) error
 }
 
 type Task struct {
@@ -190,7 +190,11 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 	slog.InfoContext(ctx, "sending zap")
 	pctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
-	if err := t.pavlok.Send(pctx, task, client.Zap); err != nil {
+	if err := t.pavlok.Send(
+		pctx,
+		fmt.Sprintf("Overdue task: %s", task.Title),
+		client.Zap,
+	); err != nil {
 		return fmt.Errorf("send zap: %w", err)
 	}
 	zapsSent.Inc()
