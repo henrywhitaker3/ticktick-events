@@ -12,7 +12,6 @@ import (
 	"github.com/henrywhitaker3/windowframe/v2/log"
 	"github.com/italypaleale/francis/actor"
 	"github.com/italypaleale/francis/host/local"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sosodev/duration"
 )
 
@@ -20,22 +19,12 @@ const (
 	Type = "task"
 )
 
-var (
-	zapsSent = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "zaps_sent_total",
-	})
-)
-
-func init() {
-	_ = prometheus.DefaultRegisterer.Register(zapsSent)
-}
-
 type TaskGetter interface {
 	GetTask(ctx context.Context, projectID, taskID string) (client.Task, error)
 }
 
 type StimulusSender interface {
-	Send(ctx context.Context, task client.Task, stimulus client.Stimulus) error
+	Send(ctx context.Context, task string, stimulus client.Stimulus) error
 }
 
 type Task struct {
@@ -190,10 +179,13 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 	slog.InfoContext(ctx, "sending zap")
 	pctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
-	if err := t.pavlok.Send(pctx, task, client.Zap); err != nil {
+	if err := t.pavlok.Send(
+		pctx,
+		fmt.Sprintf("Overdue task: %s", task.Title),
+		client.Zap,
+	); err != nil {
 		return fmt.Errorf("send zap: %w", err)
 	}
-	zapsSent.Inc()
 
 	state.NotificationCounter++
 	now := time.Now()

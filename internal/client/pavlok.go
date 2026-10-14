@@ -7,7 +7,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+var (
+	zapsSent = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "zaps_sent_total",
+	})
+)
+
+func init() {
+	_ = prometheus.DefaultRegisterer.Register(zapsSent)
+}
 
 const pavlokStimulusURL = "https://api.pavlok.com/api/v5/stimulus/send"
 
@@ -43,7 +55,7 @@ type SendStimulusRequest struct {
 	} `json:"stimulus"`
 }
 
-func (p *PavlokClient) Send(ctx context.Context, task Task, s Stimulus) error {
+func (p *PavlokClient) Send(ctx context.Context, task string, s Stimulus) error {
 	body, err := json.Marshal(SendStimulusRequest{
 		Stimulus: struct {
 			Type   Stimulus "json:\"stimulusType\""
@@ -52,7 +64,7 @@ func (p *PavlokClient) Send(ctx context.Context, task Task, s Stimulus) error {
 		}{
 			Type:   s,
 			Value:  100,
-			Reason: fmt.Sprintf("Overdue task: %s", task.Title),
+			Reason: task,
 		},
 	})
 	if err != nil {
@@ -84,6 +96,8 @@ func (p *PavlokClient) Send(ctx context.Context, task Task, s Stimulus) error {
 		}
 		return fmt.Errorf("send stimulus: %s", string(body))
 	}
+
+	zapsSent.Inc()
 
 	return nil
 }

@@ -27,13 +27,13 @@ func (m *mockTaskGetter) GetTask(_ context.Context, projectID, taskID string) (c
 
 type mockStimulusSender struct {
 	calls    int
-	task     client.Task
+	task     string
 	stimulus client.Stimulus
 }
 
 func (m *mockStimulusSender) Send(
 	_ context.Context,
-	task client.Task,
+	task string,
 	stimulus client.Stimulus,
 ) error {
 	m.calls++
@@ -150,7 +150,7 @@ func TestOverdueAlarmSendsZap(t *testing.T) {
 	require.Equal(t, originalTask.ProjectID, ticktick.projectID)
 	require.Equal(t, originalTask.ID, ticktick.taskID)
 	require.Equal(t, 1, pavlok.calls)
-	require.Equal(t, originalTask.ID, pavlok.task.ID)
+	require.Equal(t, "Overdue task: "+originalTask.Title, pavlok.task)
 	require.Equal(t, client.Zap, pavlok.stimulus)
 	require.Equal(t, &originalTask, state.state.Task)
 	require.NotNil(t, state.state.LastNotifiedAt)

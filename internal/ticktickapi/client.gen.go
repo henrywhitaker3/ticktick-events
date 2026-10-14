@@ -28,6 +28,29 @@ type ChecklistItem struct {
 	Title         *string `json:"title,omitempty"`
 }
 
+// Habit defines model for Habit.
+type Habit struct {
+	CreatedTime     *string   `json:"createdTime,omitempty"`
+	Id              string    `json:"id"`
+	Name            string    `json:"name"`
+	Reminders       *[]string `json:"reminders,omitempty"`
+	RepeatRule      *string   `json:"repeatRule,omitempty"`
+	Status          int       `json:"status"`
+	TargetStartDate *int      `json:"targetStartDate,omitempty"`
+}
+
+// HabitCheckin defines model for HabitCheckin.
+type HabitCheckin struct {
+	Checkins []HabitCheckinData `json:"checkins"`
+	HabitId  string             `json:"habitId"`
+}
+
+// HabitCheckinData defines model for HabitCheckinData.
+type HabitCheckinData struct {
+	Stamp int     `json:"stamp"`
+	Time  *string `json:"time,omitempty"`
+}
+
 // Task defines model for Task.
 type Task struct {
 	CompletedTime *string          `json:"completedTime,omitempty"`
@@ -50,6 +73,13 @@ type Task struct {
 	Tags          *[]string        `json:"tags,omitempty"`
 	TimeZone      *string          `json:"timeZone,omitempty"`
 	Title         string           `json:"title"`
+}
+
+// GetHabitCheckinsParams defines parameters for GetHabitCheckins.
+type GetHabitCheckinsParams struct {
+	HabitIds string `form:"habitIds" json:"habitIds"`
+	From     int    `form:"from" json:"from"`
+	To       int    `form:"to" json:"to"`
 }
 
 // ListUndoneTasksJSONBody defines parameters for ListUndoneTasks.
@@ -134,6 +164,15 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListHabits request
+	ListHabits(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetHabitCheckins request
+	GetHabitCheckins(ctx context.Context, params *GetHabitCheckinsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetHabit request
+	GetHabit(ctx context.Context, habitId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetTask request
 	GetTask(ctx context.Context, projectId string, taskId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -141,6 +180,42 @@ type ClientInterface interface {
 	ListUndoneTasksWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	ListUndoneTasks(ctx context.Context, body ListUndoneTasksJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ListHabits(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListHabitsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetHabitCheckins(ctx context.Context, params *GetHabitCheckinsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetHabitCheckinsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetHabit(ctx context.Context, habitId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetHabitRequest(c.Server, habitId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) GetTask(ctx context.Context, projectId string, taskId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -177,6 +252,136 @@ func (c *Client) ListUndoneTasks(ctx context.Context, body ListUndoneTasksJSONRe
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewListHabitsRequest generates requests for ListHabits
+func NewListHabitsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/open/v1/habit")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetHabitCheckinsRequest generates requests for GetHabitCheckins
+func NewGetHabitCheckinsRequest(server string, params *GetHabitCheckinsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/open/v1/habit/checkins")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "habitIds", runtime.ParamLocationQuery, params.HabitIds); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetHabitRequest generates requests for GetHabit
+func NewGetHabitRequest(server string, habitId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "habitId", runtime.ParamLocationPath, habitId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/open/v1/habit/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewGetTaskRequest generates requests for GetTask
@@ -303,6 +508,15 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListHabitsWithResponse request
+	ListHabitsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListHabitsResponse, error)
+
+	// GetHabitCheckinsWithResponse request
+	GetHabitCheckinsWithResponse(ctx context.Context, params *GetHabitCheckinsParams, reqEditors ...RequestEditorFn) (*GetHabitCheckinsResponse, error)
+
+	// GetHabitWithResponse request
+	GetHabitWithResponse(ctx context.Context, habitId string, reqEditors ...RequestEditorFn) (*GetHabitResponse, error)
+
 	// GetTaskWithResponse request
 	GetTaskWithResponse(ctx context.Context, projectId string, taskId string, reqEditors ...RequestEditorFn) (*GetTaskResponse, error)
 
@@ -310,6 +524,72 @@ type ClientWithResponsesInterface interface {
 	ListUndoneTasksWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ListUndoneTasksResponse, error)
 
 	ListUndoneTasksWithResponse(ctx context.Context, body ListUndoneTasksJSONRequestBody, reqEditors ...RequestEditorFn) (*ListUndoneTasksResponse, error)
+}
+
+type ListHabitsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]Habit
+}
+
+// Status returns HTTPResponse.Status
+func (r ListHabitsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListHabitsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetHabitCheckinsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]HabitCheckin
+}
+
+// Status returns HTTPResponse.Status
+func (r GetHabitCheckinsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetHabitCheckinsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetHabitResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Habit
+}
+
+// Status returns HTTPResponse.Status
+func (r GetHabitResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetHabitResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type GetTaskResponse struct {
@@ -356,6 +636,33 @@ func (r ListUndoneTasksResponse) StatusCode() int {
 	return 0
 }
 
+// ListHabitsWithResponse request returning *ListHabitsResponse
+func (c *ClientWithResponses) ListHabitsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListHabitsResponse, error) {
+	rsp, err := c.ListHabits(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListHabitsResponse(rsp)
+}
+
+// GetHabitCheckinsWithResponse request returning *GetHabitCheckinsResponse
+func (c *ClientWithResponses) GetHabitCheckinsWithResponse(ctx context.Context, params *GetHabitCheckinsParams, reqEditors ...RequestEditorFn) (*GetHabitCheckinsResponse, error) {
+	rsp, err := c.GetHabitCheckins(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetHabitCheckinsResponse(rsp)
+}
+
+// GetHabitWithResponse request returning *GetHabitResponse
+func (c *ClientWithResponses) GetHabitWithResponse(ctx context.Context, habitId string, reqEditors ...RequestEditorFn) (*GetHabitResponse, error) {
+	rsp, err := c.GetHabit(ctx, habitId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetHabitResponse(rsp)
+}
+
 // GetTaskWithResponse request returning *GetTaskResponse
 func (c *ClientWithResponses) GetTaskWithResponse(ctx context.Context, projectId string, taskId string, reqEditors ...RequestEditorFn) (*GetTaskResponse, error) {
 	rsp, err := c.GetTask(ctx, projectId, taskId, reqEditors...)
@@ -380,6 +687,84 @@ func (c *ClientWithResponses) ListUndoneTasksWithResponse(ctx context.Context, b
 		return nil, err
 	}
 	return ParseListUndoneTasksResponse(rsp)
+}
+
+// ParseListHabitsResponse parses an HTTP response from a ListHabitsWithResponse call
+func ParseListHabitsResponse(rsp *http.Response) (*ListHabitsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListHabitsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []Habit
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetHabitCheckinsResponse parses an HTTP response from a GetHabitCheckinsWithResponse call
+func ParseGetHabitCheckinsResponse(rsp *http.Response) (*GetHabitCheckinsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetHabitCheckinsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []HabitCheckin
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetHabitResponse parses an HTTP response from a GetHabitWithResponse call
+func ParseGetHabitResponse(rsp *http.Response) (*GetHabitResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetHabitResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Habit
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseGetTaskResponse parses an HTTP response from a GetTaskWithResponse call

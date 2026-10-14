@@ -1,15 +1,15 @@
 # TickTick Events
 
-TickTick Events sends a Pavlok zap for TickTick tasks that remain overdue. It
-uses a PostgreSQL-backed actor runtime to retain each task's notification state
-and scheduled alarms across service restarts.
+TickTick Events sends Pavlok zaps for overdue TickTick tasks and missed habit
+reminders. It uses a PostgreSQL-backed actor runtime to retain notification
+state and scheduled alarms across service restarts.
 
 ## How it works
 
 1. An orchestrator runs immediately at startup and then every
    `CHECK_INTERVAL` (one minute by default). It asks TickTick for unfinished
-   tasks due within the past 14 days and keeps only tasks whose due date has
-   passed.
+   tasks due within the past 14 days and for habits with configured reminders.
+   It keeps only tasks whose due date has passed.
 2. Each overdue task is delivered to a durable actor keyed by the TickTick task
    ID. The actor schedules its first check after `INTERACTION_WAIT` (one minute
    by default), then repeats the check every 10 minutes.
@@ -19,6 +19,12 @@ and scheduled alarms across service restarts.
 4. Otherwise, unless the current time is within a configured quiet period, it
    sends a Pavlok `zap` (strength 100) and records the notification. The
    default maximum is five zaps per due date.
+5. Each reminded habit is given a one-shot alarm at its next TickTick reminder.
+   When that alarm fires, the service refreshes the habit and its recent
+   check-ins. It requests the prior 14 calendar days through tomorrow, so a
+   check-in made today is included whether TickTick interprets the end date as
+   inclusive or exclusive. A habit checked in on the reminder's calendar day
+   is not zapped; otherwise it receives one zap for that reminder occurrence.
 
 Changing a task's due date starts a new notification cycle. The actor state and
 alarms live in PostgreSQL, so they are not lost when the process restarts.
@@ -78,8 +84,8 @@ All application settings are environment variables.
 
 ### Quiet times
 
-Set `QUIET_TIMES_<DAY>` to suppress zaps during that day's inclusive time
-range. `<DAY>` is one of `MONDAY` through `SUNDAY`; values use
+Set `QUIET_TIMES_<DAY>` to suppress overdue-task zaps during that day's
+inclusive time range. `<DAY>` is one of `MONDAY` through `SUNDAY`; values use
 `HH:mm:ss-HH:mm:ss` in the service host's local time. Ranges may cross
 midnight.
 
@@ -88,8 +94,9 @@ export QUIET_TIMES_MONDAY="22:00:00-06:00:00"
 export QUIET_TIMES_TUESDAY="09:00:00-17:00:00"
 ```
 
-An alarm still runs during quiet time; that occurrence simply sends no zap and
-does not count towards `MAX_NOTIFICATIONS`.
+An overdue-task alarm still runs during quiet time; that occurrence simply
+sends no zap and does not count towards `MAX_NOTIFICATIONS`. Habit reminder
+alerts are not currently subject to quiet times.
 
 ## Health, metrics, and tracing
 
