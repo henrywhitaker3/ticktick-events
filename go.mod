@@ -3,7 +3,7 @@ module github.com/henrywhitaker3/ticktick-events
 go 1.27.2
 
 require (
-	github.com/henrywhitaker3/windowframe/v2 v2.6.2
+	github.com/henrywhitaker3/windowframe/v2 v2.6.3
 	github.com/italypaleale/francis v0.1.1
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/prometheus/client_golang v1.25.0
@@ -29,7 +29,7 @@ require (
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/grafana/otel-profiling-go v0.5.1 // indirect
+	github.com/grafana/otel-profiling-go v0.7.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.31.0 // indirect
 	github.com/henrywhitaker3/ctxgen v1.0.1 // indirect
 	github.com/italypaleale/go-kit v1.2.5 // indirect
