@@ -3,6 +3,62 @@ info:
   title: TickTick Open API
   version: 1.0.0
 paths:
+  /open/v1/habit:
+    get:
+      operationId: ListHabits
+      responses:
+        '200':
+          description: Habits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Habit'
+  /open/v1/habit/{habitId}:
+    get:
+      operationId: GetHabit
+      parameters:
+        - name: habitId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Habit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Habit'
+  /open/v1/habit/checkins:
+    get:
+      operationId: GetHabitCheckins
+      parameters:
+        - name: habitIds
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Habit check-ins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HabitCheckin'
   /open/v1/project/{projectId}/task/{taskId}:
     get:
       operationId: GetTask
@@ -52,6 +108,46 @@ paths:
                   $ref: '#/components/schemas/Task'
 components:
   schemas:
+    Habit:
+      type: object
+      required:
+        - id
+        - name
+        - status
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: integer
+        repeatRule:
+          type: string
+        targetStartDate:
+          type: integer
+        createdTime:
+          type: string
+    HabitCheckin:
+      type: object
+      required:
+        - habitId
+        - checkins
+      properties:
+        habitId:
+          type: string
+        checkins:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabitCheckinData'
+    HabitCheckinData:
+      type: object
+      required:
+        - stamp
+      properties:
+        stamp:
+          type: integer
+        time:
+          type: string
     ChecklistItem:
       type: object
       properties:

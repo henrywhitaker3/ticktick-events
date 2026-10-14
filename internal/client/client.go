@@ -5,17 +5,21 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/ticktickapi"
+	"github.com/teambition/rrule-go"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
 	apiBaseURL         = "https://api.ticktick.com"
 	undoneTaskWindow   = 14 * 24 * time.Hour
+	habitCheckinWindow = 14 * 24 * time.Hour
 	tickTickTimeLayout = "2006-01-02T15:04:05-0700"
+	tickTickDateLayout = "20060102"
 
 	TaskStatusNormal = 0
 )
@@ -47,6 +51,14 @@ type ChecklistItem struct {
 	IsAllDay      bool
 	SortOrder     int64
 	TimeZone      string
+}
+
+type Habit struct {
+	ID          string
+	Name        string
+	Status      int
+	LastCheckin *time.Time
+	NextCheckin time.Time
 }
 
 func New(token string) *TickTickClient {
@@ -159,12 +171,128 @@ func (c *TickTickClient) GetTask(ctx context.Context, projectID, taskID string) 
 	return task, nil
 }
 
+// GetHabits retrieves all habits available to the authenticated user.
+func (c *TickTickClient) GetHabits(ctx context.Context) ([]Habit, error) {
+	response, err := c.api.ListHabitsWithResponse(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list habits: %w", err)
+	}
+	if err := validateHabitsResponse(response); err != nil {
+		return nil, err
+	}
+	if len(*response.JSON200) == 0 {
+		return []Habit{}, nil
+	}
+
+	now := time.Now().UTC()
+	habitIDs := make([]string, 0, len(*response.JSON200))
+	for _, habit := range *response.JSON200 {
+		habitIDs = append(habitIDs, habit.Id)
+	}
+	lastCheckins, err := c.getHabitCheckins(ctx, habitIDs, now)
+	if err != nil {
+		return nil, err
+	}
+
+	habits := make([]Habit, 0, len(*response.JSON200))
+	for _, source := range *response.JSON200 {
+		habit, err := habitFromAPI(source, lastCheckins[source.Id], now)
+		if err != nil {
+			return nil, fmt.Errorf("map habit %q: %w", source.Id, err)
+		}
+		habits = append(habits, habit)
+	}
+
+	return habits, nil
+}
+
+// GetHabit retrieves a habit by ID.
+func (c *TickTickClient) GetHabit(ctx context.Context, habitID string) (Habit, error) {
+	response, err := c.api.GetHabitWithResponse(ctx, habitID)
+	if err != nil {
+		return Habit{}, fmt.Errorf("get habit: %w", err)
+	}
+	if err := validateHabitResponse(response); err != nil {
+		return Habit{}, err
+	}
+
+	now := time.Now().UTC()
+	lastCheckins, err := c.getHabitCheckins(ctx, []string{habitID}, now)
+	if err != nil {
+		return Habit{}, err
+	}
+
+	habit, err := habitFromAPI(*response.JSON200, lastCheckins[response.JSON200.Id], now)
+	if err != nil {
+		return Habit{}, fmt.Errorf("map habit %q: %w", response.JSON200.Id, err)
+	}
+	return habit, nil
+}
+
+func (c *TickTickClient) getHabitCheckins(ctx context.Context, habitIDs []string, now time.Time) (map[string]time.Time, error) {
+	response, err := c.api.GetHabitCheckinsWithResponse(ctx, &ticktickapi.GetHabitCheckinsParams{
+		HabitIds: strings.Join(habitIDs, ","),
+		From:     tickTickDateStamp(now.AddDate(0, 0, -14)),
+		To:       tickTickDateStamp(now),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get habit check-ins: %w", err)
+	}
+	if err := validateHabitCheckinsResponse(response); err != nil {
+		return nil, err
+	}
+
+	latest := make(map[string]time.Time, len(*response.JSON200))
+	for _, checkinDocument := range *response.JSON200 {
+		for _, checkin := range checkinDocument.Checkins {
+			checkinTime, err := habitCheckinTime(checkin)
+			if err != nil {
+				return nil, fmt.Errorf("parse check-in for habit %q: %w", checkinDocument.HabitId, err)
+			}
+			if previous, ok := latest[checkinDocument.HabitId]; !ok || checkinTime.After(previous) {
+				latest[checkinDocument.HabitId] = checkinTime
+			}
+		}
+	}
+	return latest, nil
+}
+
 func validateUndoneTasksResponse(response *ticktickapi.ListUndoneTasksResponse) error {
 	if response == nil {
 		return fmt.Errorf("list undone tasks: empty response")
 	}
 	if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
 		return responseError("list undone tasks", response.StatusCode(), response.Body)
+	}
+	return nil
+}
+
+func validateHabitsResponse(response *ticktickapi.ListHabitsResponse) error {
+	if response == nil {
+		return fmt.Errorf("list habits: empty response")
+	}
+	if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+		return responseError("list habits", response.StatusCode(), response.Body)
+	}
+	return nil
+}
+
+func validateHabitResponse(response *ticktickapi.GetHabitResponse) error {
+	if response == nil {
+		return fmt.Errorf("get habit: empty response")
+	}
+	if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+		return responseError("get habit", response.StatusCode(), response.Body)
+	}
+	return nil
+}
+
+func validateHabitCheckinsResponse(response *ticktickapi.GetHabitCheckinsResponse) error {
+	if response == nil {
+		return fmt.Errorf("get habit check-ins: empty response")
+	}
+	if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+		return responseError("get habit check-ins", response.StatusCode(), response.Body)
 	}
 	return nil
 }
@@ -237,6 +365,86 @@ func taskFromAPI(source ticktickapi.Task) (Task, error) {
 		Status:        source.Status,
 		Kind:          stringValue(source.Kind),
 	}, nil
+}
+
+func habitFromAPI(source ticktickapi.Habit, lastCheckin, now time.Time) (Habit, error) {
+	nextCheckin, err := nextHabitCheckin(source, now)
+	if err != nil {
+		return Habit{}, err
+	}
+
+	var lastCheckinPointer *time.Time
+	if !lastCheckin.IsZero() {
+		lastCheckinPointer = &lastCheckin
+	}
+
+	return Habit{
+		ID:          source.Id,
+		Name:        source.Name,
+		Status:      source.Status,
+		LastCheckin: lastCheckinPointer,
+		NextCheckin: nextCheckin,
+	}, nil
+}
+
+func habitCheckinTime(checkin ticktickapi.HabitCheckinData) (time.Time, error) {
+	if checkin.Time != nil {
+		return parseTickTickTime(*checkin.Time)
+	}
+	return parseTickTickDateStamp(checkin.Stamp)
+}
+
+func nextHabitCheckin(habit ticktickapi.Habit, now time.Time) (time.Time, error) {
+	if habit.RepeatRule == nil || *habit.RepeatRule == "" {
+		return time.Time{}, nil
+	}
+
+	rule, err := rrule.StrToRRule(*habit.RepeatRule)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse repeat rule for habit %q: %w", habit.Id, err)
+	}
+	rule.DTStart(habitRecurrenceStart(habit, now))
+
+	return rule.After(startOfDay(now), true), nil
+}
+
+func habitRecurrenceStart(habit ticktickapi.Habit, now time.Time) time.Time {
+	if habit.TargetStartDate != nil {
+		if start, err := parseTickTickDateStamp(*habit.TargetStartDate); err == nil {
+			return start
+		}
+	}
+	if habit.CreatedTime != nil {
+		if created, err := parseTickTickTime(*habit.CreatedTime); err == nil {
+			return startOfDay(created)
+		}
+	}
+	return startOfDay(now)
+}
+
+func parseTickTickDateStamp(stamp int) (time.Time, error) {
+	value := strconv.Itoa(stamp)
+	if len(value) != len(tickTickDateLayout) {
+		return time.Time{}, fmt.Errorf("expected TickTick date stamp: %d", stamp)
+	}
+	parsed, err := time.Parse(tickTickDateLayout, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse TickTick date stamp %d: %w", stamp, err)
+	}
+	return parsed, nil
+}
+
+func tickTickDateStamp(value time.Time) int {
+	stamp, err := strconv.Atoi(value.UTC().Format(tickTickDateLayout))
+	if err != nil {
+		panic(fmt.Sprintf("format TickTick date stamp: %v", err))
+	}
+	return stamp
+}
+
+func startOfDay(value time.Time) time.Time {
+	value = value.UTC()
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func stringValue(value *string) string {

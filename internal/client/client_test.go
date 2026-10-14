@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/henrywhitaker3/ticktick-events/internal/ticktickapi"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -118,6 +119,153 @@ func TestGetTask(t *testing.T) {
 	if task.SnoozeDate == nil ||
 		!task.SnoozeDate.Equal(time.Date(2020, time.January, 3, 3, 4, 5, 0, time.UTC)) {
 		t.Errorf("SnoozeDate = %v", task.SnoozeDate)
+	}
+}
+
+func TestGetHabits(t *testing.T) {
+	client, err := newClient("test-token", "https://ticktick.test", &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if got := request.Header.Get("Authorization"); got != "Bearer test-token" {
+				t.Errorf("Authorization = %q, want Bearer test-token", got)
+			}
+
+			switch request.URL.Path {
+			case "/open/v1/habit":
+				if request.Method != http.MethodGet {
+					t.Errorf("method = %q, want GET", request.Method)
+				}
+				return jsonResponse(request, `[
+  {"id":"habit-1","name":"Read","status":0,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","targetStartDate":20261001},
+  {"id":"habit-2","name":"Exercise","status":2}
+]`), nil
+			case "/open/v1/habit/checkins":
+				if got := request.URL.Query().Get("habitIds"); got != "habit-1,habit-2" {
+					t.Errorf("habitIds = %q, want habit-1,habit-2", got)
+				}
+				if request.URL.Query().Get("from") == "" || request.URL.Query().Get("to") == "" {
+					t.Errorf("check-in range = %q, want both from and to", request.URL.RawQuery)
+				}
+				return jsonResponse(request, `[
+  {"habitId":"habit-1","checkins":[{"stamp":20261012},{"stamp":20261013,"time":"2026-10-13T09:00:00+0000"}]}
+]`), nil
+			default:
+				t.Errorf("path = %q", request.URL.Path)
+				return nil, nil
+			}
+
+			return nil, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("newClient() error = %v", err)
+	}
+
+	habits, err := client.GetHabits(context.Background())
+	if err != nil {
+		t.Fatalf("GetHabits() error = %v", err)
+	}
+	if len(habits) != 2 {
+		t.Fatalf("GetHabits() returned %d habits, want 2", len(habits))
+	}
+
+	first := habits[0]
+	if first.ID != "habit-1" || first.Name != "Read" || first.Status != 0 {
+		t.Errorf("GetHabits() first habit = %#v", first)
+	}
+	if first.LastCheckin == nil ||
+		!first.LastCheckin.Equal(time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)) {
+		t.Errorf("LastCheckin = %v", first.LastCheckin)
+	}
+	if want := startOfDay(time.Now()); !first.NextCheckin.Equal(want) {
+		t.Errorf("NextCheckin = %v, want %v", first.NextCheckin, want)
+	}
+
+	second := habits[1]
+	if second.LastCheckin != nil || !second.NextCheckin.IsZero() {
+		t.Errorf("GetHabits() absent check-ins = %#v", second)
+	}
+}
+
+func TestGetHabit(t *testing.T) {
+	client, err := newClient("test-token", "https://ticktick.test", &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			switch request.URL.Path {
+			case "/open/v1/habit/habit-1":
+				if request.Method != http.MethodGet {
+					t.Errorf("method = %q, want GET", request.Method)
+				}
+				if got := request.Header.Get("Authorization"); got != "Bearer test-token" {
+					t.Errorf("Authorization = %q, want Bearer test-token", got)
+				}
+				return jsonResponse(request, `{
+  "id":"habit-1","name":"Read","status":0,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","targetStartDate":20261001
+}`), nil
+			case "/open/v1/habit/checkins":
+				if got := request.URL.Query().Get("habitIds"); got != "habit-1" {
+					t.Errorf("habitIds = %q, want habit-1", got)
+				}
+				return jsonResponse(request, `[
+  {"habitId":"habit-1","checkins":[{"stamp":20261013,"time":"2026-10-13T09:00:00+0000"}]}
+]`), nil
+			default:
+				t.Errorf("path = %q", request.URL.Path)
+				return nil, nil
+			}
+		}),
+	})
+	if err != nil {
+		t.Fatalf("newClient() error = %v", err)
+	}
+
+	habit, err := client.GetHabit(context.Background(), "habit-1")
+	if err != nil {
+		t.Fatalf("GetHabit() error = %v", err)
+	}
+	if habit.ID != "habit-1" || habit.Name != "Read" || habit.Status != 0 {
+		t.Errorf("GetHabit() habit = %#v", habit)
+	}
+	if habit.LastCheckin == nil ||
+		!habit.LastCheckin.Equal(time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)) {
+		t.Errorf("LastCheckin = %v", habit.LastCheckin)
+	}
+	if want := startOfDay(time.Now()); !habit.NextCheckin.Equal(want) {
+		t.Errorf("NextCheckin = %v, want %v", habit.NextCheckin, want)
+	}
+}
+
+func TestNextHabitCheckin(t *testing.T) {
+	now := time.Date(2026, time.October, 14, 15, 0, 0, 0, time.UTC)
+	dailyRule := "RRULE:FREQ=DAILY;INTERVAL=1"
+	weeklyRule := "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"
+	start := 20261001
+
+	testCases := []struct {
+		name  string
+		habit ticktickapi.Habit
+		want  time.Time
+	}{
+		{
+			name:  "daily",
+			habit: ticktickapi.Habit{Id: "daily", RepeatRule: &dailyRule, TargetStartDate: &start},
+			want:  time.Date(2026, time.October, 14, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "weekly days",
+			habit: ticktickapi.Habit{Id: "weekly", RepeatRule: &weeklyRule, TargetStartDate: &start},
+			want:  time.Date(2026, time.October, 14, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := nextHabitCheckin(testCase.habit, now)
+			if err != nil {
+				t.Fatalf("nextHabitCheckin() error = %v", err)
+			}
+			if !got.Equal(testCase.want) {
+				t.Errorf("nextHabitCheckin() = %v, want %v", got, testCase.want)
+			}
+		})
 	}
 }
 
