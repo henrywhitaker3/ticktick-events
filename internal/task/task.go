@@ -150,6 +150,12 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 	}
 
 	if state.Completed {
+		// If it has completed, then the alarm was not cleared up,
+		// so try that again.
+		slog.DebugContext(ctx, "task already completed")
+		if err := t.client.DeleteAlarm(ctx, Overdue); err != nil {
+			slog.ErrorContext(ctx, "cleanup completed task alarm", "error", err)
+		}
 		return nil
 	}
 
@@ -158,10 +164,16 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 		return fmt.Errorf("refresh task data: %w", err)
 	}
 
-	if task.Status > 0 || task.CompletedTime != nil || task.DueDate != state.Task.DueDate ||
+	if !task.DueDate.Equal(state.Task.DueDate) {
+		slog.InfoContext(ctx, "task due date change, deleting alarm")
+		return t.client.DeleteAlarm(ctx, Overdue)
+	}
+
+	if task.Status > 0 || task.CompletedTime != nil ||
 		state.NotificationCounter >= t.maxNotifications {
 		slog.DebugContext(ctx, "task completed")
 		state.Completed = true
+		state.Task = &task
 		if err := t.client.SetState(ctx, state, nil); err != nil {
 			return fmt.Errorf("store task state: %w", err)
 		}
