@@ -147,7 +147,7 @@ func TestTickTickClientEmitsHTTPSpan(t *testing.T) {
 		t.Fatalf("GetTask() error = %v", err)
 	}
 
-	assertClientSpan(t, recorder.Ended(), "ticktick HTTP request")
+	assertClientSpan(t, recorder.Ended(), "GET /open/v1/project/project-1/task/task-1")
 }
 
 func TestPavlokClientEmitsHTTPSpan(t *testing.T) {
@@ -162,7 +162,7 @@ func TestPavlokClientEmitsHTTPSpan(t *testing.T) {
 		t.Fatalf("Send() error = %v", err)
 	}
 
-	assertClientSpan(t, recorder.Ended(), "pavlok HTTP request")
+	assertClientSpan(t, recorder.Ended(), "POST /api/v5/stimulus/send")
 }
 
 func installSpanRecorder(t *testing.T) *tracetest.SpanRecorder {
