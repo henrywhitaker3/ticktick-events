@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	_ "time/tzdata"
 
 	"github.com/henrywhitaker3/ticktick-events/internal/client"
 	"github.com/henrywhitaker3/ticktick-events/internal/config"
