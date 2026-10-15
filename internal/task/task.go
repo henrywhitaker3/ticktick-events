@@ -67,11 +67,19 @@ func New(opts Opts) actor.Factory {
 }
 
 func Register(host *local.Host, opts Opts) error {
+	cleanup, err := newCleanupTasksCronjob(host)
+	if err != nil {
+		return fmt.Errorf("create cleanup cronjob: %w", err)
+	}
+	if err := host.RegisterBuiltInActor(cleanup); err != nil {
+		return fmt.Errorf("register cleanup cronjob: %w", err)
+	}
 	return host.RegisterActor(Type, New(opts))
 }
 
 const (
 	Overdue = "overdue"
+	Stop    = "stop"
 
 	notifyInterval   = time.Minute * 10
 	alarmGracePeriod = notifyInterval + (time.Minute * 5)
@@ -81,6 +89,9 @@ func (t *Task) Invoke(ctx context.Context, method string, data actor.Envelope) (
 	switch method {
 	case Overdue:
 		return t.overdue(ctx, data)
+	case Stop:
+		t.client.Halt()
+		return nil, t.client.DeleteState(ctx)
 	default:
 		return nil, fmt.Errorf("unknown invoke method %s", method)
 	}

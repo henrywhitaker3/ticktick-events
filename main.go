@@ -60,13 +60,13 @@ func main() {
 		slog.Error("register orchestrator", "error", err)
 		os.Exit(1)
 	}
+
 	go func() {
 		if err := metrics.Run(ctx); err != nil {
 			slog.Error("run metrics server", "error", err)
 			os.Exit(1)
 		}
 	}()
-
 	if err := host.Run(ctx); err != nil {
 		slog.Error("start actor runtime", "error", err)
 		os.Exit(1)
