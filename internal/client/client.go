@@ -32,7 +32,9 @@ var tickTickReminderDuration = regexp.MustCompile(
 )
 
 type TickTickClient struct {
-	api ticktickapi.ClientWithResponsesInterface
+	api           ticktickapi.ClientWithResponsesInterface
+	habitTimeZone *time.Location
+	now           func() time.Time
 }
 
 type Task struct {
@@ -64,19 +66,39 @@ type Habit struct {
 	ID          string
 	Name        string
 	Status      int
+	TimeZone    string
 	LastCheckin *time.Time
 	NextCheckin time.Time
 }
 
-func New(token string) *TickTickClient {
-	client, err := newClient(token, apiBaseURL, http.DefaultClient)
+// New creates a TickTick client. habitTimeZone must be the IANA timezone set
+// in the authenticated TickTick account (for example, "Europe/London").
+func New(token, habitTimeZone string) (*TickTickClient, error) {
+	location, err := time.LoadLocation(habitTimeZone)
 	if err != nil {
-		panic(fmt.Sprintf("create TickTick client: %v", err))
+		return nil, fmt.Errorf("load TickTick habit timezone %q: %w", habitTimeZone, err)
 	}
-	return client
+
+	client, err := newClientWithTimeZone(token, apiBaseURL, http.DefaultClient, location)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 func newClient(token, baseURL string, httpClient *http.Client) (*TickTickClient, error) {
+	return newClientWithTimeZone(token, baseURL, httpClient, time.UTC)
+}
+
+func newClientWithTimeZone(
+	token, baseURL string,
+	httpClient *http.Client,
+	habitTimeZone *time.Location,
+) (*TickTickClient, error) {
+	if habitTimeZone == nil {
+		return nil, fmt.Errorf("TickTick habit timezone is required")
+	}
+
 	api, err := ticktickapi.NewClientWithResponses(
 		baseURL,
 		ticktickapi.WithHTTPClient(newInstrumentedHTTPClient(httpClient, "ticktick HTTP request")),
@@ -90,7 +112,11 @@ func newClient(token, baseURL string, httpClient *http.Client) (*TickTickClient,
 		return nil, fmt.Errorf("create generated TickTick client: %w", err)
 	}
 
-	return &TickTickClient{api: api}, nil
+	return &TickTickClient{
+		api:           api,
+		habitTimeZone: habitTimeZone,
+		now:           time.Now,
+	}, nil
 }
 
 // newInstrumentedHTTPClient returns a copy of httpClient whose transport emits
@@ -199,7 +225,7 @@ func (c *TickTickClient) GetHabits(ctx context.Context) ([]Habit, error) {
 
 	slog.DebugContext(ctx, "got raw habits", "habits", response.JSON200)
 
-	now := time.Now()
+	now := c.habitNow()
 	habitIDs := make([]string, 0, len(remindedHabits))
 	for _, habit := range remindedHabits {
 		habitIDs = append(habitIDs, habit.Id)
@@ -234,7 +260,7 @@ func (c *TickTickClient) GetHabit(ctx context.Context, habitID string) (Habit, e
 		return Habit{}, fmt.Errorf("get habit %q: no reminder configured", response.JSON200.Id)
 	}
 
-	now := time.Now()
+	now := c.habitNow()
 	lastCheckins, err := c.getHabitCheckins(ctx, []string{habitID}, now)
 	if err != nil {
 		return Habit{}, err
@@ -272,7 +298,7 @@ func (c *TickTickClient) getHabitCheckins(
 	latest := make(map[string]time.Time, len(*response.JSON200))
 	for _, checkinDocument := range *response.JSON200 {
 		for _, checkin := range checkinDocument.Checkins {
-			checkinTime, err := habitCheckinTime(checkin)
+			checkinTime, err := habitCheckinTime(checkin, c.habitTimeZone)
 			if err != nil {
 				return nil, fmt.Errorf(
 					"parse check-in for habit %q: %w",
@@ -286,6 +312,10 @@ func (c *TickTickClient) getHabitCheckins(
 		}
 	}
 	return latest, nil
+}
+
+func (c *TickTickClient) habitNow() time.Time {
+	return c.now().In(c.habitTimeZone)
 }
 
 // habitCheckinDateRange returns a local-calendar range that includes today.
@@ -352,12 +382,12 @@ func formatTickTickTime(value time.Time) string {
 func parseTickTickTime(value string) (time.Time, error) {
 	parsed, err := time.Parse(tickTickTimeLayout, value)
 	if err == nil {
-		return parsed, nil
+		return parsed.UTC(), nil
 	}
 
 	parsed, rfc3339Err := time.Parse(time.RFC3339, value)
 	if rfc3339Err == nil {
-		return parsed, nil
+		return parsed.UTC(), nil
 	}
 
 	return time.Time{}, fmt.Errorf("expected TickTick timestamp: %q", value)
@@ -422,16 +452,19 @@ func habitFromAPI(source ticktickapi.Habit, lastCheckin, now time.Time) (Habit, 
 		ID:          source.Id,
 		Name:        source.Name,
 		Status:      source.Status,
+		TimeZone:    now.Location().String(),
 		LastCheckin: lastCheckinPointer,
 		NextCheckin: nextCheckin,
 	}, nil
 }
 
-func habitCheckinTime(checkin ticktickapi.HabitCheckinData) (time.Time, error) {
+func habitCheckinTime(checkin ticktickapi.HabitCheckinData, location *time.Location) (time.Time, error) {
 	if checkin.Time != nil {
-		return parseTickTickTime(*checkin.Time)
+		value, err := parseTickTickTime(*checkin.Time)
+		return value.UTC(), err
 	}
-	return parseTickTickDateStamp(checkin.Stamp)
+	value, err := parseTickTickDateStampInLocation(checkin.Stamp, location)
+	return value.UTC(), err
 }
 
 func nextHabitCheckin(habit ticktickapi.Habit, now time.Time) (time.Time, error) {

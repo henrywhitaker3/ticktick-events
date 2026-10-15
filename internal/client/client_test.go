@@ -177,7 +177,7 @@ func TestGetHabits(t *testing.T) {
 		!first.LastCheckin.Equal(time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)) {
 		t.Errorf("LastCheckin = %v", first.LastCheckin)
 	}
-	if first.NextCheckin.In(time.Local).Hour() != 9 || first.NextCheckin.In(time.Local).Minute() != 0 {
+	if first.NextCheckin.Location() != time.UTC || first.NextCheckin.Hour() != 9 || first.NextCheckin.Minute() != 0 {
 		t.Errorf("NextCheckin = %v, want a 09:00 reminder", first.NextCheckin)
 	}
 
@@ -185,7 +185,7 @@ func TestGetHabits(t *testing.T) {
 	if second.LastCheckin != nil {
 		t.Errorf("GetHabits() absent check-ins = %#v", second)
 	}
-	if second.NextCheckin.In(time.Local).Hour() != 9 || second.NextCheckin.In(time.Local).Minute() != 30 {
+	if second.NextCheckin.Location() != time.UTC || second.NextCheckin.Hour() != 9 || second.NextCheckin.Minute() != 30 {
 		t.Errorf("NextCheckin = %v, want a 09:30 reminder", second.NextCheckin)
 	}
 }
@@ -251,8 +251,52 @@ func TestGetHabit(t *testing.T) {
 		!habit.LastCheckin.Equal(time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)) {
 		t.Errorf("LastCheckin = %v", habit.LastCheckin)
 	}
-	if habit.NextCheckin.In(time.Local).Hour() != 9 || habit.NextCheckin.In(time.Local).Minute() != 30 {
+	if habit.NextCheckin.Location() != time.UTC || habit.NextCheckin.Hour() != 9 || habit.NextCheckin.Minute() != 30 {
 		t.Errorf("NextCheckin = %v, want a 09:30 reminder", habit.NextCheckin)
+	}
+}
+
+func TestGetHabitConvertsUserReminderToUTC(t *testing.T) {
+	location, err := time.LoadLocation("Europe/London")
+	if err != nil {
+		t.Fatalf("load Europe/London location: %v", err)
+	}
+	client, err := newClientWithTimeZone("test-token", "https://ticktick.test", &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			switch request.URL.Path {
+			case "/open/v1/habit/habit-1":
+				return jsonResponse(request, `{
+  "id":"habit-1","name":"Read","status":0,"repeatRule":"RRULE:FREQ=DAILY;INTERVAL=1","reminders":["11:40"],"targetStartDate":20261001
+}`), nil
+			case "/open/v1/habit/checkins":
+				return jsonResponse(request, `[
+  {"habitId":"habit-1","checkins":[{"stamp":20261014}]}
+]`), nil
+			default:
+				t.Errorf("path = %q", request.URL.Path)
+				return nil, nil
+			}
+		}),
+	}, location)
+	if err != nil {
+		t.Fatalf("newClientWithTimeZone() error = %v", err)
+	}
+	client.now = func() time.Time {
+		return time.Date(2026, time.October, 14, 10, 35, 0, 0, time.UTC)
+	}
+
+	habit, err := client.GetHabit(context.Background(), "habit-1")
+	if err != nil {
+		t.Fatalf("GetHabit() error = %v", err)
+	}
+	if got, want := habit.NextCheckin, time.Date(2026, time.October, 14, 10, 40, 0, 0, time.UTC); !got.Equal(want) || got.Location() != time.UTC {
+		t.Errorf("NextCheckin = %v (%v), want %v (UTC)", got, got.Location(), want)
+	}
+	if habit.LastCheckin == nil || !habit.LastCheckin.Equal(time.Date(2026, time.October, 13, 23, 0, 0, 0, time.UTC)) || habit.LastCheckin.Location() != time.UTC {
+		t.Errorf("LastCheckin = %v, want 2026-10-13 23:00:00 UTC", habit.LastCheckin)
+	}
+	if got, want := habit.TimeZone, "Europe/London"; got != want {
+		t.Errorf("TimeZone = %q, want %q", got, want)
 	}
 }
 
@@ -334,13 +378,13 @@ func TestNextHabitCheckinConvertsLocalReminderToUTC(t *testing.T) {
 }
 
 func TestParseTickTickTime(t *testing.T) {
-	got, err := parseTickTickTime("2026-03-04T23:58:20.000+0000")
+	got, err := parseTickTickTime("2026-03-05T00:58:20.000+0100")
 	if err != nil {
 		t.Fatalf("parseTickTickTime() error = %v", err)
 	}
 	want := time.Date(2026, time.March, 4, 23, 58, 20, 0, time.UTC)
-	if !got.Equal(want) {
-		t.Errorf("parseTickTickTime() = %v, want %v", got, want)
+	if !got.Equal(want) || got.Location() != time.UTC {
+		t.Errorf("parseTickTickTime() = %v (%v), want %v (UTC)", got, got.Location(), want)
 	}
 }
 

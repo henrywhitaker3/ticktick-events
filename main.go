@@ -28,7 +28,11 @@ func main() {
 		slog.Error("init actor runtime", "error", err)
 		os.Exit(1)
 	}
-	ticktick := client.New(string(conf.TickTickToken))
+	ticktick, err := client.New(string(conf.TickTick.Token), conf.TickTick.TimeZone)
+	if err != nil {
+		slog.Error("init TickTick client", "error", err)
+		os.Exit(1)
+	}
 	pavlok := client.NewPavlokClient(string(conf.PavlokToken))
 	if err := task.Register(host, task.Opts{
 		Ticktick:         ticktick,

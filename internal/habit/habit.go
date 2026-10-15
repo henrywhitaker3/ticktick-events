@@ -104,7 +104,7 @@ func (h *Habit) processAlert(ctx context.Context) error {
 		slog.DebugContext(ctx, "already alerted")
 		return nil
 	}
-	if checkedInForAlert(state.Habit.LastCheckin, state.NextAlarm) {
+	if checkedInForAlert(state.Habit.LastCheckin, state.NextAlarm, state.Habit.TimeZone) {
 		slog.InfoContext(ctx, "habit already checked in")
 		state.LastAlertFor = &state.NextAlarm
 		if err := h.client.SetState(ctx, state, nil); err != nil {
@@ -132,16 +132,21 @@ func (h *Habit) processAlert(ctx context.Context) error {
 	return nil
 }
 
-func checkedInForAlert(lastCheckin *time.Time, alertTime time.Time) bool {
+func checkedInForAlert(lastCheckin *time.Time, alertTime time.Time, timeZone string) bool {
 	if lastCheckin == nil {
 		return false
 	}
-	return startOfDay(*lastCheckin).Equal(startOfDay(alertTime))
+
+	location, err := time.LoadLocation(timeZone)
+	if err != nil {
+		location = time.UTC
+	}
+	return startOfDay(*lastCheckin, location).Equal(startOfDay(alertTime, location))
 }
 
-func startOfDay(value time.Time) time.Time {
-	value = value.UTC()
-	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
+func startOfDay(value time.Time, location *time.Location) time.Time {
+	value = value.In(location)
+	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, location)
 }
 
 func (h *Habit) onboardHabit(ctx context.Context, data actor.Envelope) (any, error) {
@@ -162,7 +167,7 @@ func (h *Habit) onboardHabit(ctx context.Context, data actor.Envelope) (any, err
 	if !state.NextAlarm.Equal(habit.NextCheckin) {
 		slog.DebugContext(ctx, "setup habit alert", "time", habit.NextCheckin)
 		if err := h.client.SetAlarm(ctx, Alert, actor.AlarmProperties{
-			DueTime: habit.NextCheckin,
+			DueTime: habit.NextCheckin.UTC(),
 		}); err != nil {
 			return nil, fmt.Errorf("set habit alarm: %w", err)
 		}

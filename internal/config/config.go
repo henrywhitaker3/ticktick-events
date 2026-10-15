@@ -142,9 +142,14 @@ type Runtime struct {
 	Port        int                   `env:"PORT, default=7571"`
 }
 
+type TickTick struct {
+	Token    config.RedactedString `env:"TOKEN"`
+	TimeZone string                `env:"TIME_ZONE, default=Europe/London"`
+}
+
 type Config struct {
-	TickTickToken config.RedactedString `env:"TICKTICK_TOKEN"`
-	PavlokToken   config.RedactedString `env:"PAVLOK_TOKEN"`
+	TickTick    TickTick              `env:",prefix=TICKTICK_"`
+	PavlokToken config.RedactedString `env:"PAVLOK_TOKEN"`
 
 	Runtime Runtime `env:",prefix=RUNTIME_"`
 

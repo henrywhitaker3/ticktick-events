@@ -72,6 +72,7 @@ All application settings are environment variables.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TICKTICK_TOKEN` | required | OAuth bearer token used to read TickTick tasks. |
+| `TICKTICK_TIME_ZONE` | required | IANA timezone configured for the TickTick account (for example, `Europe/London`). Habit reminder clock times are resolved in this timezone and then scheduled in UTC. |
 | `PAVLOK_TOKEN` | required | Bearer token used to send Pavlok stimuli. |
 | `RUNTIME_DB_URL` | required | PostgreSQL connection string for durable actor state and alarms. |
 | `RUNTIME_PSK` | required | Pre-shared key for the actor runtime. Generate one with `openssl rand -hex 32` or `mise run psk`. |
