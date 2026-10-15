@@ -45,6 +45,16 @@ type taskState struct {
 	Onboarded           bool
 }
 
+func (t taskState) needsUpdate(task client.Task) bool {
+	return t.Task == nil || !t.Onboarded || !t.Task.DueDate.Equal(task.DueDate) ||
+		t.LastAlarmAt.Before(time.Now().Add(-alarmGracePeriod))
+}
+
+func (t taskState) completed(task client.Task, maxNotifications int) bool {
+	return task.Status > 0 || task.CompletedTime != nil ||
+		t.NotificationCounter >= maxNotifications
+}
+
 type Opts struct {
 	Ticktick         TaskGetter
 	Pavlok           StimulusSender
@@ -107,11 +117,18 @@ func (t *Task) overdue(ctx context.Context, data actor.Envelope) (any, error) {
 		return nil, fmt.Errorf("decode task data: %w", err)
 	}
 
-	if state.Task != nil && state.Onboarded && state.Task.DueDate.Equal(task.DueDate) &&
-		!state.LastAlarmAt.Before(time.Now().Add(-alarmGracePeriod)) {
+	if !state.needsUpdate(task) {
 		return state, nil
 	}
 
+	return t.onboardOverdueTask(ctx, state, task)
+}
+
+func (t *Task) onboardOverdueTask(
+	ctx context.Context,
+	state taskState,
+	task client.Task,
+) (any, error) {
 	if err := t.client.SetAlarm(ctx, Overdue, actor.AlarmProperties{
 		DueTime:  time.Now().Add(t.sleep),
 		Interval: duration.FromTimeDuration(notifyInterval).String(),
@@ -131,6 +148,7 @@ func (t *Task) overdue(ctx context.Context, data actor.Envelope) (any, error) {
 	if err := t.client.SetState(ctx, state, nil); err != nil {
 		return nil, fmt.Errorf("set task state: %w", err)
 	}
+
 	return state, nil
 }
 
@@ -161,8 +179,6 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 	}
 
 	if state.Completed {
-		// If it has completed, then the alarm was not cleared up,
-		// so try that again.
 		slog.DebugContext(ctx, "task already completed")
 		if err := t.client.DeleteAlarm(ctx, Overdue); err != nil {
 			slog.ErrorContext(ctx, "cleanup completed task alarm", "error", err)
@@ -180,18 +196,8 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 		return t.client.DeleteAlarm(ctx, Overdue)
 	}
 
-	if task.Status > 0 || task.CompletedTime != nil ||
-		state.NotificationCounter >= t.maxNotifications {
-		slog.DebugContext(ctx, "task completed")
-		state.Completed = true
-		state.Task = &task
-		if err := t.client.SetState(ctx, state, nil); err != nil {
-			return fmt.Errorf("store task state: %w", err)
-		}
-		if err := t.client.DeleteAlarm(ctx, Overdue); err != nil {
-			return fmt.Errorf("delete overdue alarm: %w", err)
-		}
-		return nil
+	if state.completed(task, t.maxNotifications) {
+		return t.handleCompleted(ctx, state, task)
 	}
 
 	if t.quiet.In(time.Now()) {
@@ -199,6 +205,23 @@ func (t *Task) processOverdueJob(ctx context.Context) error {
 		return nil
 	}
 
+	return t.sendZap(ctx, state, task)
+}
+
+func (t *Task) handleCompleted(ctx context.Context, state taskState, task client.Task) error {
+	slog.DebugContext(ctx, "task completed")
+	state.Completed = true
+	state.Task = &task
+	if err := t.client.SetState(ctx, state, nil); err != nil {
+		return fmt.Errorf("store task state: %w", err)
+	}
+	if err := t.client.DeleteAlarm(ctx, Overdue); err != nil {
+		return fmt.Errorf("delete overdue alarm: %w", err)
+	}
+	return nil
+}
+
+func (t *Task) sendZap(ctx context.Context, state taskState, task client.Task) error {
 	slog.InfoContext(ctx, "sending zap")
 	pctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
