@@ -22,11 +22,9 @@ type StimulusSender interface {
 }
 
 type Habit struct {
-	client           actor.Client[habitState]
-	pavlok           StimulusSender
-	ticktick         HabitGetter
-	sleep            time.Duration
-	maxNotifications int
+	client   actor.Client[habitState]
+	pavlok   StimulusSender
+	ticktick HabitGetter
 }
 
 type habitState struct {
