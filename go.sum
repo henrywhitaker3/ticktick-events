@@ -43,6 +43,8 @@ github.com/henrywhitaker3/windowframe/v2 v2.6.3 h1:/EWXf55kBIN9l7s8kQyfjddB73cQm
 github.com/henrywhitaker3/windowframe/v2 v2.6.3/go.mod h1:wD6FkjE5VMP6pUfUOYAJqwho5dUQcTUEnPonHGin8/o=
 github.com/italypaleale/francis v0.1.1 h1:zn6gY5EcAAvcalBZQlgbhG9zIbJEI7CCk0KolMaeMj8=
 github.com/italypaleale/francis v0.1.1/go.mod h1:7bPR1A+YV9+pCoRWaX1w6fwxYjjyCsBQbFOHpNjASuo=
+github.com/italypaleale/francis v0.1.2 h1:A3KRk60KkIXX4cWtk1C3qtsO6T7X019Od5+3ec3m70g=
+github.com/italypaleale/francis v0.1.2/go.mod h1:4BFFxN60DD9A9eseOp1K1iijjYmnmigAZMylW4KdzE0=
 github.com/italypaleale/go-kit v1.2.5 h1:LWhbaaBKABeGELpgRl1iIGuP5ZhlwJK807HUjm5QbGM=
 github.com/italypaleale/go-kit v1.2.5/go.mod h1:kpPxIOmLeDRYj0P2VpyPADIje/kxNN6KTDlYJG1MEx0=
 github.com/italypaleale/go-sql-utils v0.3.11 h1:bL4TLtRHkRS7raEqqI+IQXT8wn8GfnxmDn0zPzfSfns=
