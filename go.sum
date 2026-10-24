@@ -41,6 +41,8 @@ github.com/henrywhitaker3/ctxgen v1.0.1 h1:T1tsyUKS4ymBkqP9KBrVDh5fskzkdm2zTfLH0
 github.com/henrywhitaker3/ctxgen v1.0.1/go.mod h1:Q9fBma6LqFfEqJbltrc1Icdp9YUA5M3UVcz7tqGfPLc=
 github.com/henrywhitaker3/windowframe/v2 v2.6.3 h1:/EWXf55kBIN9l7s8kQyfjddB73cQmqetCn6qf4+BsyM=
 github.com/henrywhitaker3/windowframe/v2 v2.6.3/go.mod h1:wD6FkjE5VMP6pUfUOYAJqwho5dUQcTUEnPonHGin8/o=
+github.com/henrywhitaker3/windowframe/v2 v2.6.6 h1:I6/DBB9rwhFfIs0M+6KJrgJMTLYnI//iYM/VAInD4mY=
+github.com/henrywhitaker3/windowframe/v2 v2.6.6/go.mod h1:PErXiGdFPecf4Lp9+ku4rSUlb5ZAxpLRDcupmT4qL34=
 github.com/italypaleale/francis v0.1.1 h1:zn6gY5EcAAvcalBZQlgbhG9zIbJEI7CCk0KolMaeMj8=
 github.com/italypaleale/francis v0.1.1/go.mod h1:7bPR1A+YV9+pCoRWaX1w6fwxYjjyCsBQbFOHpNjASuo=
 github.com/italypaleale/go-kit v1.2.5 h1:LWhbaaBKABeGELpgRl1iIGuP5ZhlwJK807HUjm5QbGM=
