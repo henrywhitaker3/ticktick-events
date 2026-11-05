@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/henrywhitaker3/windowframe/v2 v2.7.3
 	github.com/italypaleale/francis v0.2.1
-	github.com/oapi-codegen/runtime v1.7.0
+	github.com/oapi-codegen/runtime v1.8.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/sosodev/duration v1.4.0
 	github.com/stretchr/testify v1.12.1
